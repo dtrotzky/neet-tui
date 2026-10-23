@@ -28,7 +28,8 @@ isn't found after installing, add `~/.cargo/bin` to your `PATH`.
 | Statements and starter code for the 7 LeetCode Premium problems (Meeting Rooms, Alien Dictionary, ...) | written once by Claude from NeetCode's write-up |
 
 Everything lives in `~/.local/share/neet/` (`$XDG_DATA_HOME/neet`, on macOS too); `neet paths`
-shows the exact locations.
+shows the exact locations. The downloaded content is for your own practice; see the
+[disclaimer](#disclaimer).
 
 ## Practising
 
@@ -199,3 +200,17 @@ harness is a plain file you can read in `~/.local/share/neet/tests/` before trus
 ## Roadmap
 
 Planned features and open questions are in [ROADMAP.md](ROADMAP.md).
+
+## Disclaimer
+
+neet is an independent project, not affiliated with or endorsed by NeetCode or LeetCode. The
+repository doesn't contain their problem statements, write-ups or solutions: `neet sync`
+downloads them to your machine for your own practice, from neetcode.io, LeetCode and the
+MIT-licensed [neetcode-gh/leetcode](https://github.com/neetcode-gh/leetcode) repository. The
+only list data shipped with neet is `data/problems.json` (titles, slugs, patterns, difficulty
+and video ids), used when neetcode.io can't be read. Please respect those sites' terms of use,
+and don't redistribute the downloaded content.
+
+## License
+
+[Apache-2.0](LICENSE)
