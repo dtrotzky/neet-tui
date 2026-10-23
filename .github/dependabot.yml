@@ -1,13 +1,19 @@
 version: 2
 updates:
+  # Also proposes bumps for release.yml; those must go through dist-workspace.toml
+  # ([dist.github-action-commits], then `dist generate`), see RELEASING.md.
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: monthly
+    cooldown:
+      default-days: 14
   - package-ecosystem: cargo
     directory: /
     schedule:
       interval: monthly
+    cooldown:
+      default-days: 14
     groups:
       cargo:
         patterns: ["*"]
