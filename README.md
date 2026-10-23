@@ -7,16 +7,29 @@ spoiling the answer.
 
 ## Install
 
+Prebuilt binaries for Linux (x86_64 and ARM64, glibc 2.35+, e.g. Ubuntu 22.04 or newer) and
+macOS (Apple Silicon and Intel):
+
 ```sh
-cargo install --path .
+curl --proto '=https' --tlsv1.2 -LsSf https://github.com/dtrotzky/neet-cli/releases/latest/download/neet-installer.sh | sh
 neet sync     # one-time download (~20 s), afterwards everything works offline
 neet          # start the TUI
 ```
 
-Requirements: Linux or macOS, Rust, Neovim (or any `$EDITOR`), and
-[Claude Code](https://claude.com/claude-code) (`claude` on your `PATH`, logged in) for the
-coaching features. No API key needed: neet calls `claude -p` with all tools disabled. If `neet`
-isn't found after installing, add `~/.cargo/bin` to your `PATH`.
+The installer puts `neet` in `~/.local/bin` and adds that to your `PATH` if needed (open a new
+shell afterwards). You can also download an archive from the
+[releases page](https://github.com/dtrotzky/neet-cli/releases); every archive has a SHA-256
+checksum and a signed build attestation (`gh attestation verify <file> --repo dtrotzky/neet-cli`).
+
+From source, with Rust 1.88 or newer:
+
+```sh
+cargo install --locked --git https://github.com/dtrotzky/neet-cli
+```
+
+Requirements: Neovim (or any `$EDITOR`), and [Claude Code](https://claude.com/claude-code)
+(`claude` on your `PATH`, logged in) for the coaching features. No API key needed: neet calls
+`claude -p` with all tools disabled. Windows isn't supported.
 
 ## What gets synced
 

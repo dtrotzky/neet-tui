@@ -25,3 +25,8 @@ tar = "0.4.46"
 toml = "1.1.8"
 toml_edit = "0.25.17"
 ureq = { version = "3.5.0", features = ["json"] }
+
+# The profile that 'dist' will build with
+[profile.dist]
+inherits = "release"
+lto = "thin"
