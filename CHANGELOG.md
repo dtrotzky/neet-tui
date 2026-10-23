@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.2.1
 
 - The chat next to your code (`chat_in_editor`) also shows the problem statement, like `Enter`
   does (unless the statement split is turned off).

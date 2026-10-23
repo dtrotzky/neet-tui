@@ -1,6 +1,6 @@
 [package]
 name = "neet"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2024"
 rust-version = "1.88"
 description = "Practise NeetCode 150/250 offline in the terminal, with Claude as an interview coach"
