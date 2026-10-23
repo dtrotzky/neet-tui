@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.1
+
+- The repository is now `dtrotzky/neet-tui` (was `neet-cli`). The installer and download links
+  use the new name; the command is still `neet`, and config, data and progress are unchanged.
+- Sync identifies itself with the new repository URL.
+
 ## 0.1.0
 
 First release.

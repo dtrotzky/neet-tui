@@ -21,7 +21,7 @@ use crate::store::{Details, Problem, Store, is_safe_ident, pattern_rank, write_j
 const PRACTICE_URL: &str = "https://neetcode.io/practice";
 const TARBALL_URL: &str = "https://codeload.github.com/neetcode-gh/leetcode/tar.gz/refs/heads/main";
 const LEETCODE_GRAPHQL: &str = "https://leetcode.com/graphql";
-const USER_AGENT: &str = "neet-cli (offline NeetCode practice)";
+const USER_AGENT: &str = "neet (offline NeetCode practice; https://github.com/dtrotzky/neet-tui)";
 /// Upper bound for any single downloaded document (HTML, JS bundle, JSON).
 const MAX_DOC: u64 = 32 * 1024 * 1024;
 /// Upper bound for a single file extracted from the repo tarball.

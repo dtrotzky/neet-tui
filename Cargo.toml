@@ -1,11 +1,11 @@
 [package]
 name = "neet"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 rust-version = "1.88"
 description = "Practise NeetCode 150/250 offline in the terminal, with Claude as an interview coach"
 license = "Apache-2.0"
-repository = "https://github.com/dtrotzky/neet-cli"
+repository = "https://github.com/dtrotzky/neet-tui"
 readme = "README.md"
 keywords = ["neetcode", "leetcode", "interview", "tui", "cli"]
 categories = ["command-line-utilities"]

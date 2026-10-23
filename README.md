@@ -11,20 +11,21 @@ Prebuilt binaries for Linux (x86_64 and ARM64, glibc 2.35+, e.g. Ubuntu 22.04 or
 macOS (Apple Silicon and Intel):
 
 ```sh
-curl --proto '=https' --tlsv1.2 -LsSf https://github.com/dtrotzky/neet-cli/releases/latest/download/neet-installer.sh | sh
+curl --proto '=https' --tlsv1.2 -LsSf https://github.com/dtrotzky/neet-tui/releases/latest/download/neet-installer.sh | sh
 neet sync     # one-time download (~20 s), afterwards everything works offline
 neet          # start the TUI
 ```
 
 The installer puts `neet` in `~/.local/bin` and adds that to your `PATH` if needed (open a new
 shell afterwards). You can also download an archive from the
-[releases page](https://github.com/dtrotzky/neet-cli/releases); every archive has a SHA-256
-checksum and a signed build attestation (`gh attestation verify <file> --repo dtrotzky/neet-cli`).
+[releases page](https://github.com/dtrotzky/neet-tui/releases); every archive has a SHA-256
+checksum and a signed build attestation (`gh attestation verify <file> --repo dtrotzky/neet-tui`;
+for 0.1.0, built before the repo was renamed from `neet-cli`, use `--repo dtrotzky/neet-cli`).
 
 From source, with Rust 1.88 or newer:
 
 ```sh
-cargo install --locked --git https://github.com/dtrotzky/neet-cli
+cargo install --locked --git https://github.com/dtrotzky/neet-tui
 ```
 
 Requirements: Neovim (or any `$EDITOR`), and [Claude Code](https://claude.com/claude-code)
