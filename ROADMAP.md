@@ -75,8 +75,12 @@ Planned once the tool has been used for a while; not needed for personal use:
 - **Integration tests and CI.** Unit tests cover the parsers, scheduling and rendering helpers;
   add end-to-end tests (sync against fixtures, test runner, TUI flows) and a GitHub Actions
   workflow.
-- **Releases.** Prebuilt binaries (e.g. with cargo-dist) so others don't need a Rust toolchain.
-- **Portability.** Currently Linux/Unix only (`xdg-open`, Unix process groups for killing runs).
-  macOS needs `open` and testing; Windows needs a different process model.
+- **Releases.** Prebuilt binaries (e.g. with cargo-dist), built by GitHub Actions when a version
+  tag is pushed, so others don't need a Rust toolchain. Targets: Linux (x86_64, aarch64) and
+  macOS (Apple Silicon and Intel). Windows is left out for now.
+- **Portability.** Currently Linux only in practice. macOS should mostly work already (Unix
+  process groups and signals behave the same); the known gap is `o` (open video), which calls
+  `xdg-open` and needs `open` on macOS. Needs a test pass on a Mac. Windows would need a
+  different process model for killing runs and is out of scope for now.
 - **Git integration.** Optionally auto-commit solutions and notes to the workspace repo, so the
   history doubles as a progress log.
