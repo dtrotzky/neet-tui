@@ -1531,7 +1531,12 @@ impl App {
                         Some(v) if !v.is_empty() => format!("https://www.youtube.com/watch?v={v}"),
                         _ => p.neetcode_url(),
                     };
-                    let res = Command::new("xdg-open")
+                    let opener = if cfg!(target_os = "macos") {
+                        "open"
+                    } else {
+                        "xdg-open"
+                    };
+                    let res = Command::new(opener)
                         .arg(&url)
                         .stdin(std::process::Stdio::null())
                         .stdout(std::process::Stdio::null())
@@ -1539,7 +1544,7 @@ impl App {
                         .spawn();
                     match res {
                         Ok(_) => self.flash(format!("opening {url}")),
-                        Err(e) => self.flash(format!("xdg-open failed: {e}")),
+                        Err(e) => self.flash(format!("{opener} failed: {e}")),
                     }
                 }
             }

@@ -135,7 +135,7 @@ impl Default for Config {
 
 impl Config {
     pub fn path() -> PathBuf {
-        dirs::config_dir()
+        crate::xdg::config_home()
             .unwrap_or_else(|| PathBuf::from("."))
             .join("neet")
             .join("config.toml")

@@ -13,6 +13,7 @@ mod store;
 mod sync;
 mod testing;
 mod tui;
+mod xdg;
 
 use std::io::{BufRead, Write};
 use std::time::{Duration, Instant};

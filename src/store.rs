@@ -179,7 +179,7 @@ pub struct Store {
 
 impl Store {
     pub fn new(cfg: &Config) -> Result<Self> {
-        let root = dirs::data_dir()
+        let root = crate::xdg::data_home()
             .context("no data directory on this system")?
             .join("neet");
         let workspace = match &cfg.workspace {
