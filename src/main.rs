@@ -99,6 +99,13 @@ enum Cmd {
     Hint { problem: String },
     /// Have Claude review your solution
     Review { problem: String },
+    /// Chat with Claude about a problem, continuing the last chat (or --new)
+    Chat {
+        problem: String,
+        /// Start a new chat instead of continuing the last one
+        #[arg(long)]
+        new: bool,
+    },
     /// Ask Claude a question about a problem
     Ask {
         problem: String,
@@ -358,6 +365,9 @@ fn real_main() -> Result<()> {
             if !testing::all_passed(result) {
                 std::process::exit(1);
             }
+        }
+        Cmd::Chat { problem, new } => {
+            actions::chat(&store, &cfg, &find(&problem)?, new, cfg.lsp_enabled(false))?;
         }
         Cmd::Hint { problem } => coach(&store, &cfg, &find(&problem)?, Kind::Hint, "")?,
         Cmd::Review { problem } => coach(&store, &cfg, &find(&problem)?, Kind::Review, "")?,

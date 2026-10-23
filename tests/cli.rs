@@ -55,6 +55,7 @@ impl Sandbox {
             .args(args)
             .env("XDG_DATA_HOME", self.dir.join("data"))
             .env("XDG_CONFIG_HOME", self.dir.join("config"))
+            .env("CLAUDE_CONFIG_DIR", self.dir.join("claude"))
             .env("EDITOR", &self.editor)
             .env_remove("VISUAL")
             .output()
@@ -402,4 +403,88 @@ fn builtin_tests_handle_trees_design_in_place_and_nested_order() {
         assert!(out.status.success(), "{slug}: {stdout}{}", stderr(&out));
         assert!(stdout.contains("passed ✓"), "{slug}: {stdout}");
     }
+}
+
+/// A fake `claude` that appends its arguments (one per line, then `--`) to `log`.
+fn fake_claude(sb: &Sandbox, log: &Path) -> PathBuf {
+    let script = sb.dir.join("fake-claude.sh");
+    std::fs::write(
+        &script,
+        format!(
+            "#!/bin/sh\nfor a in \"$@\"; do echo \"$a\"; done >> '{}'\necho -- >> '{}'\n",
+            log.display(),
+            log.display()
+        ),
+    )
+    .unwrap();
+    std::fs::set_permissions(&script, PermissionsExt::from_mode(0o755)).unwrap();
+    script
+}
+
+/// The arguments of each fake `claude` call so far.
+fn calls(log: &Path) -> Vec<Vec<String>> {
+    std::fs::read_to_string(log)
+        .unwrap()
+        .split("--\n")
+        .filter(|c| !c.is_empty())
+        .map(|c| c.lines().map(String::from).collect())
+        .collect()
+}
+
+fn arg_after<'a>(call: &'a [String], flag: &str) -> Option<&'a str> {
+    let i = call.iter().position(|a| a == flag)?;
+    call.get(i + 1).map(String::as_str)
+}
+
+#[test]
+fn chat_continues_the_last_session() {
+    let sb = Sandbox::new("chat");
+    let log = sb.dir.join("claude-calls.txt");
+    let claude = fake_claude(&sb, &log);
+    sb.write_config(&format!(
+        "language = \"python\"\neditor = \"true\"\nclaude_cmd = \"{}\"\n",
+        claude.display()
+    ));
+
+    // First chat: a new session with an opening message.
+    sb.ok(&["chat", "two-sum"]);
+    let first = &calls(&log)[0];
+    let id = arg_after(first, "--session-id").unwrap().to_string();
+    assert!(first.last().unwrap().contains("Two Sum"), "{first:?}");
+    let prompt =
+        std::fs::read_to_string(arg_after(first, "--append-system-prompt-file").unwrap()).unwrap();
+    assert!(prompt.contains("0001-two-sum.py"), "{prompt}");
+
+    // Claude Code hasn't saved that session (the fake doesn't), so the next chat is new too.
+    sb.ok(&["chat", "two-sum"]);
+    let second = arg_after(&calls(&log)[1], "--session-id")
+        .unwrap()
+        .to_string();
+    assert_ne!(second, id);
+
+    // Once the transcript exists where Claude Code keeps it, chat resumes it.
+    let cwd = sb.data().join("workspace/python").canonicalize().unwrap();
+    let project: String = cwd
+        .to_str()
+        .unwrap()
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
+        .collect();
+    let transcripts = sb.dir.join("claude/projects").join(project);
+    std::fs::create_dir_all(&transcripts).unwrap();
+    std::fs::write(transcripts.join(format!("{second}.jsonl")), "{}\n").unwrap();
+    sb.ok(&["chat", "two-sum"]);
+    let third = &calls(&log)[2];
+    assert_eq!(
+        arg_after(third, "--resume"),
+        Some(second.as_str()),
+        "{third:?}"
+    );
+    assert!(arg_after(third, "--session-id").is_none());
+
+    // --new starts over even though the old one could be resumed.
+    sb.ok(&["chat", "two-sum", "--new"]);
+    let fourth = &calls(&log)[3];
+    assert!(arg_after(fourth, "--resume").is_none());
+    assert_ne!(arg_after(fourth, "--session-id"), Some(second.as_str()));
 }

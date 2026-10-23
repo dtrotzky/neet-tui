@@ -5,6 +5,10 @@
 - Built-in tests for 233 of the 250 problems in Python, without Claude: the statement's examples
   plus shipped edge cases with outputs from NeetCode's reference solutions. Other languages and
   the remaining problems still get a Claude-written harness, now built from the same cases.
+- The chat (`c`) continues each problem's last conversation, so you can quit, work on your code
+  and come back to the same chat; `C` starts a new one. Also as `neet chat <problem> [--new]`.
+- New setting "Chat next to your code" (`chat_in_editor`): the chat opens in Neovim, split next
+  to your solution.
 
 ## 0.1.1
 
