@@ -19,7 +19,7 @@ release notes.
 3. Watch the Release workflow (`gh run watch`), then check the release page and the installer:
 
    ```sh
-   curl --proto '=https' --tlsv1.2 -LsSf https://github.com/dtrotzky/neet-cli/releases/latest/download/neet-installer.sh | sh
+   curl --proto '=https' --tlsv1.2 -LsSf https://github.com/dtrotzky/neet-tui/releases/latest/download/neet-installer.sh | sh
    neet --version
    ```
 
