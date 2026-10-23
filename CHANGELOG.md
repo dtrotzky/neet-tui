@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.2.0
 
 - Built-in tests for 233 of the 250 problems in Python, without Claude: the statement's examples
   plus shipped edge cases with outputs from NeetCode's reference solutions. Other languages and
