@@ -69,9 +69,6 @@ To decide and build:
 
 Planned once the tool has been used for a while; not needed for personal use:
 
-- **Integration tests and CI.** Unit tests cover the parsers, scheduling and rendering helpers;
-  add end-to-end tests (sync against fixtures, test runner, TUI flows) and a GitHub Actions
-  workflow.
 - **Releases.** Prebuilt binaries (e.g. with cargo-dist), built by GitHub Actions when a version
   tag is pushed, so others don't need a Rust toolchain. Targets: Linux (x86_64, aarch64) and
   macOS (Apple Silicon and Intel). Windows is left out for now.

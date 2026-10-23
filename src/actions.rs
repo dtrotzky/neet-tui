@@ -631,6 +631,68 @@ mod tests {
         assert_eq!(shell_quote(Path::new("/a/it's")), "'/a/it'\\''s'");
     }
 
+    /// A store in a fresh temp folder, and a config whose Python run command is `cmd`.
+    fn run_sandbox(name: &str, cmd: &str) -> (Store, Config, PathBuf) {
+        let dir = std::env::temp_dir().join(format!("neet-{}-{name}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = Store {
+            root: dir.join("data"),
+            workspace: dir.join("workspace"),
+        };
+        let mut cfg = Config {
+            language: "python".into(),
+            ..Config::default()
+        };
+        cfg.run
+            .insert("python".into(), cmd.replace("{dir}", &shell_quote(&dir)));
+        let file = dir.join("solution.py");
+        std::fs::write(&file, "").unwrap();
+        (store, cfg, file)
+    }
+
+    #[test]
+    fn timeout_kills_the_whole_process_group() {
+        // A background child that would outlive a plain kill of the shell.
+        let (store, cfg, file) = run_sandbox("timeout", "(sleep 1; touch {dir}/leaked) & sleep 30");
+        let start = Instant::now();
+        let out = run_captured(
+            &cfg,
+            &store,
+            &file,
+            Duration::from_millis(300),
+            &Cancel::default(),
+        )
+        .unwrap();
+        assert!(start.elapsed() < Duration::from_secs(5), "{out}");
+        assert!(out.contains("timeout"), "{out}");
+        std::thread::sleep(Duration::from_millis(1500));
+        let dir = file.parent().unwrap();
+        assert!(!dir.join("leaked").exists(), "background child survived");
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn output_is_capped() {
+        let (store, cfg, file) = run_sandbox("cap", "head -c 1000000 /dev/zero | tr '\\0' a");
+        let out = run_captured(
+            &cfg,
+            &store,
+            &file,
+            Duration::from_secs(20),
+            &Cancel::default(),
+        )
+        .unwrap();
+        assert!(
+            out.len() < MAX_OUTPUT as usize + 1024,
+            "{} bytes",
+            out.len()
+        );
+        assert!(out.contains("more bytes not shown"));
+        assert!(out.contains("[ok in"));
+        let _ = std::fs::remove_dir_all(file.parent().unwrap());
+    }
+
     #[test]
     fn notes_body_drops_template() {
         let notes = format!("# Two Sum\n\n{NOTES_HINT}\n\nHash map, O(n).\n");
