@@ -9,10 +9,10 @@ use anyhow::{Context, Result, bail};
 use serde_json::Value;
 
 use crate::config::Config;
-use crate::lang::Lang;
-use crate::proc::Cancel;
+use crate::judge::proc::Cancel;
+use crate::model::lang::Lang;
+use crate::model::store::{AiLog, Problem, Store};
 use crate::render::filter_article;
-use crate::store::{AiLog, Problem, Store};
 
 pub const MAX_HINT_LEVEL: usize = 4;
 /// Only the most recent coaching entries are sent back as context.
@@ -384,7 +384,7 @@ fn claude_home() -> PathBuf {
 
 /// `<home>/projects/<cwd with every non-alphanumeric character as '-'>/<id>.jsonl`.
 fn session_file(home: &Path, cwd: &Path, id: &str) -> Option<PathBuf> {
-    if !crate::store::is_safe_ident(id) {
+    if !crate::model::store::is_safe_ident(id) {
         return None;
     }
     let cwd = cwd.canonicalize().unwrap_or_else(|_| cwd.to_path_buf());

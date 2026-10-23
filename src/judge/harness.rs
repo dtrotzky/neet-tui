@@ -9,12 +9,12 @@ use std::path::PathBuf;
 use anyhow::{Context, Result, bail};
 use chrono::Local;
 
-use crate::cases::{self, Availability};
-use crate::claude::{self, Coaching};
+use crate::coach::claude::{self, Coaching};
 use crate::config::Config;
-use crate::lang::Lang;
+use crate::judge::cases::{self, Availability};
+use crate::model::lang::Lang;
+use crate::model::store::{Problem, Progress, Store, TestRun};
 use crate::render::sanitize;
-use crate::store::{Problem, Progress, Store, TestRun};
 
 /// Separates your solution from scratch checks in solution files.
 pub const MARKER: &str =

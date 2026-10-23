@@ -1,5 +1,5 @@
 //! Built-in test cases, so `neet test` works without Claude: the examples from the synced
-//! statement, plus edge cases and per-problem settings shipped in `data/tests.json`. A generic
+//! statement, plus edge cases and per-problem settings shipped in `assets/tests.json`. A generic
 //! harness (`harness.py`) runs them; other languages get them as input for Claude's harness.
 
 use std::collections::HashMap;
@@ -8,11 +8,11 @@ use std::sync::LazyLock;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::store::{Problem, Store};
+use crate::model::store::{Problem, Store};
 
 /// Per-problem overrides and extra cases, keyed by LeetCode slug.
-const SHIPPED: &str = include_str!("../data/tests.json");
-const HARNESS: &str = include_str!("harness.py");
+const SHIPPED: &str = include_str!("../../assets/tests.json");
+const HARNESS: &str = include_str!("../../assets/harness.py");
 
 static OVERRIDES: LazyLock<HashMap<String, Override>> =
     LazyLock::new(|| serde_json::from_str(SHIPPED).unwrap_or_default());
@@ -469,7 +469,7 @@ mod tests {
     fn shipped_overrides_parse() {
         let parsed: HashMap<String, Override> = serde_json::from_str(SHIPPED).unwrap();
         for (slug, o) in &parsed {
-            assert!(crate::store::is_safe_ident(slug), "{slug}");
+            assert!(crate::model::store::is_safe_ident(slug), "{slug}");
             assert!(o.unsupported.is_none() || o.cases.is_empty(), "{slug}");
         }
     }

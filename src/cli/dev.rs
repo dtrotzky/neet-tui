@@ -9,14 +9,14 @@ use std::time::Duration;
 use anyhow::{Context, Result, bail};
 use serde_json::Value;
 
-use crate::actions;
-use crate::cases::{self, Availability, Case, Override, Spec};
-use crate::claude::{self, Kind};
+use crate::coach::claude::{self, Kind};
 use crate::config::Config;
-use crate::lang::{self, Lang};
-use crate::proc::Cancel;
-use crate::store::{Problem, Store};
-use crate::testing;
+use crate::judge::cases::{self, Availability, Case, Override, Spec};
+use crate::judge::harness;
+use crate::judge::proc::Cancel;
+use crate::judge::run;
+use crate::model::lang::{self, Lang};
+use crate::model::store::{Problem, Store};
 
 const TIMEOUT: Duration = Duration::from_secs(30);
 
@@ -33,7 +33,7 @@ fn reference_test_file(store: &Store, p: &Problem, spec: &Spec) -> Option<std::p
     for (_, def) in lang.node_defs {
         code.push_str(def);
     }
-    code.push_str(testing::solution_part(&reference));
+    code.push_str(harness::solution_part(&reference));
     code.push_str(&cases::python_harness(spec));
     let build = store.build_dir().join("dev");
     std::fs::create_dir_all(&build).ok()?;
@@ -66,8 +66,8 @@ pub fn check_tests(store: &Store, problems: &[Problem], only: &[String]) -> Resu
             no_ref += 1;
             continue;
         };
-        let out = actions::run_captured(&cfg, store, &file, TIMEOUT, &Cancel::default())?;
-        let result = testing::parse_result(&out);
+        let out = run::run_captured(&cfg, store, &file, TIMEOUT, &Cancel::default())?;
+        let result = harness::parse_result(&out);
         match result {
             Some((passed, total)) if passed == total && total > 0 => pass += 1,
             // NeetCode's file itself doesn't compile; nothing to check it against.
@@ -120,7 +120,7 @@ const MAX_CASE_BYTES: usize = 4096;
 
 /// Asks Claude for edge-case inputs for each problem that has built-in tests and a working
 /// reference solution, computes the expected outputs with the reference solution, and writes
-/// them into `file` (`data/tests.json`). Problems that already have edge cases are skipped
+/// them into `file` (`assets/tests.json`). Problems that already have edge cases are skipped
 /// unless `force`.
 /// Rewrites `file` in the canonical layout, dropping oversized cases.
 pub fn tidy_tests(file: &Path) -> Result<()> {
@@ -204,7 +204,7 @@ pub fn gen_tests(
     Ok(())
 }
 
-/// `data/tests.json` with one line per problem setting and per case, for readable diffs.
+/// `assets/tests.json` with one line per problem setting and per case, for readable diffs.
 fn shipped_json(shipped: &BTreeMap<String, Override>) -> Result<String> {
     let mut out = String::from("{\n");
     for (i, (slug, o)) in shipped.iter().enumerate() {
@@ -272,7 +272,7 @@ fn edge_cases(store: &Store, cfg: &Config, p: &Problem) -> Result<Vec<Case>> {
         })
         .collect();
     let file = reference_test_file(store, p, &record).context("writing the test file")?;
-    let out = actions::run_captured(cfg, store, &file, TIMEOUT, &Cancel::default())?;
+    let out = run::run_captured(cfg, store, &file, TIMEOUT, &Cancel::default())?;
     let mut outputs: HashMap<String, Value> = HashMap::new();
     for line in out.lines().filter_map(|l| l.strip_prefix("RECORD ")) {
         // A line cut off by the output cap belongs to an oversized case anyway.
@@ -307,8 +307,8 @@ fn edge_cases(store: &Store, cfg: &Config, p: &Problem) -> Result<Vec<Case>> {
 fn passes(store: &Store, p: &Problem, spec: &Spec) -> Result<bool> {
     let cfg = Config::default();
     let file = reference_test_file(store, p, spec).context("writing the test file")?;
-    let out = actions::run_captured(&cfg, store, &file, TIMEOUT, &Cancel::default())?;
-    Ok(testing::all_passed(testing::parse_result(&out)))
+    let out = run::run_captured(&cfg, store, &file, TIMEOUT, &Cancel::default())?;
+    Ok(harness::all_passed(harness::parse_result(&out)))
 }
 
 fn edge_prompt(store: &Store, p: &Problem, spec: &Spec) -> String {
@@ -348,7 +348,7 @@ Reply with only a JSON array in a ```json block: [{{\"name\": \"edge: ...\", \"i
 
 /// The proposed (name, input) pairs that have the right shape for this problem.
 fn parse_proposals(reply: &str, spec: &Spec) -> Result<Vec<(String, Value)>> {
-    let json = testing::extract_code(reply).unwrap_or_else(|| reply.to_string());
+    let json = harness::extract_code(reply).unwrap_or_else(|| reply.to_string());
     let list: Vec<Value> =
         serde_json::from_str(json.trim()).context("Claude's reply isn't a JSON array")?;
     let mut out = Vec::new();

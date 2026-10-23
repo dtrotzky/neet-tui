@@ -4,9 +4,9 @@ use std::path::PathBuf;
 
 use anyhow::{Result, bail};
 
-use crate::claude::Kind;
+use crate::coach::claude::Kind;
 use crate::config::Config;
-use crate::lang::LANGS;
+use crate::model::lang::LANGS;
 
 /// Model aliases offered when cycling; "" means "default" (or "inherit").
 const MODEL_CHOICES: &[&str] = &["", "opus", "sonnet", "haiku"];

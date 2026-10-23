@@ -1,9 +1,11 @@
 //! Minimal Markdown -> ratatui rendering, plus NeetCode article filtering.
 
+pub mod highlight;
+
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 
-use crate::lang::Lang;
+use crate::model::lang::Lang;
 
 /// Strips control characters (terminal escape sequences in particular) from
 /// downloaded or model-generated text before it is stored or printed raw.
@@ -86,7 +88,9 @@ pub fn markdown(text: &str) -> Vec<Line<'static>> {
             if code_lang.is_empty() || code_lang == "text" {
                 spans.push(Span::styled(code, code_style));
             } else {
-                spans.extend(crate::highlight::highlight(&code, &code_lang, code_style));
+                spans.extend(crate::render::highlight::highlight(
+                    &code, &code_lang, code_style,
+                ));
             }
             lines.push(Line::from(spans));
             continue;
@@ -210,7 +214,7 @@ fn is_italic_marker(chars: &[char], i: usize, open: bool) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::lang;
+    use crate::model::lang;
 
     #[test]
     fn sanitize_strips_escape_sequences() {
