@@ -88,8 +88,9 @@ Neovim config, nothing to change in yours; plain Vim is unaffected. Your statusl
 **Chat (`c`).** A full Claude Code session about the problem, which can read your solution file.
 Each problem keeps its chat: quit it (`/exit`), work on your code, and `c` picks up the same
 conversation, so you can say "I tried your hint, have a look" and Claude reads the new code. `C`
-starts a new chat. With "Chat next to your code" on in the settings, the chat opens in Neovim in
-a split next to your solution instead, so you can edit and chat without switching.
+starts a new chat. With "Chat next to your code" on in the settings, the chat opens in Neovim
+instead, next to your solution and the statement, so you can read, edit and chat without
+switching.
 
 **Notes (`N`).** A Markdown file per problem in `<workspace>/notes/` for your one-line insight.
 Shown under the statement; `neet notes --export > cheatsheet.md` collects all of them, grouped by

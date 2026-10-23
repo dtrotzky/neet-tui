@@ -2097,6 +2097,7 @@ impl App {
                         ("t", "test"),
                         ("h", "nudge"),
                         ("r", "review"),
+                        ("c", "chat"),
                         ("m", "mock"),
                         ("n", "next"),
                         ("D", "due"),
@@ -2298,6 +2299,7 @@ mod tests {
         let s = screen(&mut app);
         assert!(s.contains("NeetCode 150"), "{s}");
         assert!(s.contains("Contains Duplicate"), "{s}");
+        assert!(s.contains("c chat"), "{s}");
         assert_eq!(app.selected().unwrap().slug, "contains-duplicate");
         press(&mut app, KeyCode::Char('j'));
         assert_eq!(app.selected().unwrap().slug, "valid-anagram");
