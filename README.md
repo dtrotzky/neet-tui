@@ -13,10 +13,10 @@ neet sync     # one-time download (~20 s), afterwards everything works offline
 neet          # start the TUI
 ```
 
-Requirements: Rust, Neovim (or any `$EDITOR`), and [Claude Code](https://claude.com/claude-code)
-(`claude` on your `PATH`, logged in) for the coaching features. No API key needed: neet calls
-`claude -p` with all tools disabled. If `neet` isn't found after installing, add
-`~/.cargo/bin` to your `PATH`.
+Requirements: Linux or macOS, Rust, Neovim (or any `$EDITOR`), and
+[Claude Code](https://claude.com/claude-code) (`claude` on your `PATH`, logged in) for the
+coaching features. No API key needed: neet calls `claude -p` with all tools disabled. If `neet`
+isn't found after installing, add `~/.cargo/bin` to your `PATH`.
 
 ## What gets synced
 
@@ -27,7 +27,8 @@ Requirements: Rust, Neovim (or any `$EDITOR`), and [Claude Code](https://claude.
 | Problem statements, starter code, examples | LeetCode |
 | Statements and starter code for the 7 LeetCode Premium problems (Meeting Rooms, Alien Dictionary, ...) | written once by Claude from NeetCode's write-up |
 
-Everything lives in `~/.local/share/neet/`; `neet paths` shows the exact locations.
+Everything lives in `~/.local/share/neet/` (`$XDG_DATA_HOME/neet`, on macOS too); `neet paths`
+shows the exact locations.
 
 ## Practising
 

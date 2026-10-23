@@ -78,9 +78,10 @@ Planned once the tool has been used for a while; not needed for personal use:
 - **Releases.** Prebuilt binaries (e.g. with cargo-dist), built by GitHub Actions when a version
   tag is pushed, so others don't need a Rust toolchain. Targets: Linux (x86_64, aarch64) and
   macOS (Apple Silicon and Intel). Windows is left out for now.
-- **Portability.** Currently Linux only in practice. macOS should mostly work already (Unix
-  process groups and signals behave the same); the known gap is `o` (open video), which calls
-  `xdg-open` and needs `open` on macOS. Needs a test pass on a Mac. Windows would need a
-  different process model for killing runs and is out of scope for now.
+- **Portability.** Linux and macOS. On macOS, CI builds and runs the tests, `o` uses `open`,
+  and config and data use the same XDG paths as on Linux (not `~/Library/Application Support`),
+  so the docs and `XDG_*` overrides apply unchanged. Still needs a hands-on test on a Mac
+  (TUI, Neovim, runs, Claude features). Windows would need a different process model for
+  killing runs and is out of scope for now.
 - **Git integration.** Optionally auto-commit solutions and notes to the workspace repo, so the
   history doubles as a progress log.
