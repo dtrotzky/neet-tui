@@ -1,6 +1,7 @@
 //! Running and testing solutions: test cases, harnesses (built-in and Claude-written) and
-//! process control for runs.
+//! running solutions with timeouts and output capture.
 
 pub mod cases;
 pub mod harness;
 pub mod proc;
+pub mod run;

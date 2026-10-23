@@ -13,6 +13,7 @@ use crate::coach::claude::{self, Kind};
 use crate::coach::mock;
 use crate::config::Config;
 use crate::judge::proc::Cancel;
+use crate::judge::run;
 use crate::judge::{cases, harness};
 use crate::model::store::{MockRecord, Problem, Status, Store};
 use crate::model::{srs, stats, store};
@@ -312,8 +313,7 @@ pub fn run() -> Result<()> {
         }
         Cmd::Run { problem } => {
             let p = find(&problem)?;
-            let status =
-                practice::run_interactive(&cfg, &store, &store.solution_path(&p, cfg.lang()))?;
+            let status = run::run_interactive(&cfg, &store, &store.solution_path(&p, cfg.lang()))?;
             if !status.success() {
                 std::process::exit(status.code().unwrap_or(1));
             }
@@ -326,7 +326,7 @@ pub fn run() -> Result<()> {
                 eprintln!("Claude is writing tests for {} (once)...", p.title);
             }
             let (output, result) =
-                practice::run_tests(&store, &cfg, &p, regen, test_timeout, &Cancel::default())?;
+                run::run_tests(&store, &cfg, &p, regen, test_timeout, &Cancel::default())?;
             println!("{}", sanitize(&output));
             println!("\n{}", harness::summary(&output));
             match cases::spec(&store, &p) {

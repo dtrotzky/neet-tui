@@ -28,6 +28,7 @@ use crate::config::Config;
 use crate::config::settings::{self, Control, Setting};
 use crate::judge::harness;
 use crate::judge::proc::Cancel;
+use crate::judge::run;
 use crate::model::srs;
 use crate::model::stats;
 use crate::model::store::{MockRecord, Problem, Progress, Status, Store, UiState};
@@ -761,7 +762,7 @@ impl App {
         let cfg = self.cfg.clone();
         let store = self.store.clone();
         std::thread::spawn(move || {
-            let out = practice::run_captured(&cfg, &store, &path, cfg.run_timeout(), &job)
+            let out = run::run_captured(&cfg, &store, &path, cfg.run_timeout(), &job)
                 .unwrap_or_else(|e| format!("error: {e:#}"));
             let _ = tx.send(out);
         });
@@ -807,11 +808,10 @@ impl App {
         let (cfg, store, problem) = (self.cfg.clone(), self.store.clone(), p.clone());
         std::thread::spawn(move || {
             let timeout = cfg.run_timeout() * 2;
-            let out =
-                match practice::run_existing_tests(&store, &cfg, &problem, source, timeout, &job) {
-                    Ok((out, _)) => out,
-                    Err(e) => format!("error: {e:#}"),
-                };
+            let out = match run::run_existing_tests(&store, &cfg, &problem, source, timeout, &job) {
+                Ok((out, _)) => out,
+                Err(e) => format!("error: {e:#}"),
+            };
             let _ = tx.send(out);
         });
         self.run = Some(RunTask {

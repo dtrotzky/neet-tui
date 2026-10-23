@@ -14,9 +14,9 @@ use crate::config::Config;
 use crate::judge::cases::{self, Availability, Case, Override, Spec};
 use crate::judge::harness;
 use crate::judge::proc::Cancel;
+use crate::judge::run;
 use crate::model::lang::{self, Lang};
 use crate::model::store::{Problem, Store};
-use crate::practice;
 
 const TIMEOUT: Duration = Duration::from_secs(30);
 
@@ -66,7 +66,7 @@ pub fn check_tests(store: &Store, problems: &[Problem], only: &[String]) -> Resu
             no_ref += 1;
             continue;
         };
-        let out = practice::run_captured(&cfg, store, &file, TIMEOUT, &Cancel::default())?;
+        let out = run::run_captured(&cfg, store, &file, TIMEOUT, &Cancel::default())?;
         let result = harness::parse_result(&out);
         match result {
             Some((passed, total)) if passed == total && total > 0 => pass += 1,
@@ -272,7 +272,7 @@ fn edge_cases(store: &Store, cfg: &Config, p: &Problem) -> Result<Vec<Case>> {
         })
         .collect();
     let file = reference_test_file(store, p, &record).context("writing the test file")?;
-    let out = practice::run_captured(cfg, store, &file, TIMEOUT, &Cancel::default())?;
+    let out = run::run_captured(cfg, store, &file, TIMEOUT, &Cancel::default())?;
     let mut outputs: HashMap<String, Value> = HashMap::new();
     for line in out.lines().filter_map(|l| l.strip_prefix("RECORD ")) {
         // A line cut off by the output cap belongs to an oversized case anyway.
@@ -307,7 +307,7 @@ fn edge_cases(store: &Store, cfg: &Config, p: &Problem) -> Result<Vec<Case>> {
 fn passes(store: &Store, p: &Problem, spec: &Spec) -> Result<bool> {
     let cfg = Config::default();
     let file = reference_test_file(store, p, spec).context("writing the test file")?;
-    let out = practice::run_captured(&cfg, store, &file, TIMEOUT, &Cancel::default())?;
+    let out = run::run_captured(&cfg, store, &file, TIMEOUT, &Cancel::default())?;
     Ok(harness::all_passed(harness::parse_result(&out)))
 }
 
