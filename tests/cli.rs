@@ -272,6 +272,139 @@ fn corrupt_progress_is_an_error_and_left_untouched() {
     assert_eq!(std::fs::read_to_string(&path).unwrap(), "{ not json");
 }
 
+/// Seeds a synced statement and Python starter snippet, like `neet sync` would.
+fn seed(sb: &Sandbox, slug: &str, snippet: &str, statement: &str) {
+    let dir = sb.data().join("problems").join(slug);
+    std::fs::create_dir_all(&dir).unwrap();
+    let details = serde_json::json!({
+        "id": null, "description": statement, "hints": [], "topics": [], "examples": [],
+        "snippets": { "python3": snippet }, "premium": false,
+    });
+    std::fs::write(dir.join("details.json"), details.to_string()).unwrap();
+    std::fs::write(dir.join("description.md"), statement).unwrap();
+}
+
+/// A sandbox where any Claude call fails, to prove the built-in tests don't need one.
+fn without_claude(name: &str) -> Sandbox {
+    let sb = Sandbox::new(name);
+    sb.write_config("language = \"python\"\neditor = \"true\"\nclaude_cmd = \"false\"\n");
+    sb
+}
+
+fn write_solution(sb: &Sandbox, stem: &str, code: &str) {
+    let sol = sb.solution(stem);
+    std::fs::create_dir_all(sol.parent().unwrap()).unwrap();
+    std::fs::write(sol, format!("{code}\n# {MARKER}\nprint('scratch')\n")).unwrap();
+}
+
+const TWO_SUM_STATEMENT: &str = "# 1. Two Sum\n\nYou can return the answer in any order.\n\n\
+**Example 1:**\n\n**Input:** `nums = [2,7,11,15], target = 9`\n\n**Output:** `[0,1]`\n\n\
+**Example 2:**\n\n**Input:** `nums = [3,2,4], target = 6`\n\n**Output:** `[1,2]`\n\n\
+**Example 3:**\n\n**Input:** `nums = [3,3], target = 6`\n\n**Output:** `[0,1]`\n";
+
+#[test]
+fn builtin_tests_run_without_claude() {
+    let sb = without_claude("builtin");
+    seed(
+        &sb,
+        "two-sum",
+        "class Solution:\n    def twoSum(self, nums: list[int], target: int) -> list[int]:\n        ",
+        TWO_SUM_STATEMENT,
+    );
+    // Returns the pair the other way round: fine, the statement allows any order.
+    write_solution(
+        &sb,
+        "0001-two-sum",
+        "class Solution:\n    def twoSum(self, nums, target):\n        seen = {}\n        for i, n in enumerate(nums):\n            if target - n in seen:\n                return [i, seen[target - n]]\n            seen[n] = i",
+    );
+    let out = sb.neet(&["test", "two-sum"]);
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(out.status.success(), "{stdout}{}", stderr(&out));
+    // The three statement examples, plus whatever edge cases data/tests.json ships.
+    assert!(stdout.contains("PASS example 3"), "{stdout}");
+    assert!(stdout.contains("passed ✓"), "{stdout}");
+    assert!(stderr(&out).contains("built-in tests"), "{}", stderr(&out));
+
+    write_solution(
+        &sb,
+        "0001-two-sum",
+        "class Solution:\n    def twoSum(self, nums, target):\n        return [0, 0]",
+    );
+    let out = sb.neet(&["test", "two-sum"]);
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert_eq!(out.status.code(), Some(1), "{stdout}");
+    assert!(
+        stdout.contains(
+            "FAIL example 2: input={\"nums\": [3, 2, 4], \"target\": 6} expected=[1, 2] got=[0, 0]"
+        ),
+        "{stdout}"
+    );
+}
+
+#[test]
+fn builtin_tests_handle_trees_design_in_place_and_nested_order() {
+    let sb = without_claude("builtin-kinds");
+    let tree = "class TreeNode:\n    def __init__(self, val=0, left=None, right=None):\n        self.val = val\n        self.left = left\n        self.right = right\n\n";
+    seed(
+        &sb,
+        "invert-binary-tree",
+        "# class TreeNode:\n#     def __init__(self, val=0, left=None, right=None):\nclass Solution:\n    def invertTree(self, root: TreeNode | None) -> TreeNode | None:\n        ",
+        "**Input:** root = [4,2,7,1,3,6,9]\n\n**Output:** [4,7,2,9,6,3,1]\n\n**Input:** root = []\n\n**Output:** []\n",
+    );
+    write_solution(
+        &sb,
+        "0226-invert-binary-tree",
+        &format!(
+            "{tree}class Solution:\n    def invertTree(self, root):\n        if root:\n            root.left, root.right = self.invertTree(root.right), self.invertTree(root.left)\n        return root"
+        ),
+    );
+    seed(
+        &sb,
+        "lru-cache",
+        "class LRUCache:\n\n    def __init__(self, capacity: int):\n        \n\n    def get(self, key: int) -> int:\n        ",
+        "**Input**\n[\"LRUCache\", \"put\", \"put\", \"get\", \"put\", \"get\"]\n[[2], [1, 1], [2, 2], [1], [3, 3], [2]]\n\n**Output**\n[null, null, null, 1, null, -1]\n",
+    );
+    write_solution(
+        &sb,
+        "0146-lru-cache",
+        "from collections import OrderedDict\nclass LRUCache:\n    def __init__(self, capacity):\n        self.cap, self.d = capacity, OrderedDict()\n    def get(self, key):\n        if key not in self.d:\n            return -1\n        self.d.move_to_end(key)\n        return self.d[key]\n    def put(self, key, value):\n        self.d[key] = value\n        self.d.move_to_end(key)\n        if len(self.d) > self.cap:\n            self.d.popitem(last=False)",
+    );
+    seed(
+        &sb,
+        "rotate-image",
+        "class Solution:\n    def rotate(self, matrix: list[list[int]]) -> None:\n        ",
+        "**Input:** matrix = [[1,2],[3,4]]\n\n**Output:** [[3,1],[4,2]]\n",
+    );
+    write_solution(
+        &sb,
+        "0048-rotate-image",
+        "class Solution:\n    def rotate(self, matrix):\n        matrix[:] = [list(r) for r in zip(*matrix[::-1])]",
+    );
+    // group-anagrams compares nested lists in any order (data/tests.json).
+    seed(
+        &sb,
+        "group-anagrams",
+        "class Solution:\n    def groupAnagrams(self, strs: list[str]) -> list[list[str]]:\n        ",
+        "You can return the answer in **any order**.\n\n**Input:** strs = [\"eat\",\"tea\",\"bat\"]\n\n**Output:** [[\"bat\"],[\"eat\",\"tea\"]]\n",
+    );
+    write_solution(
+        &sb,
+        "0049-group-anagrams",
+        "class Solution:\n    def groupAnagrams(self, strs):\n        g = {}\n        for s in reversed(strs):\n            g.setdefault(''.join(sorted(s)), []).append(s)\n        return list(g.values())",
+    );
+    for slug in [
+        "invert-binary-tree",
+        "lru-cache",
+        "rotate-image",
+        "group-anagrams",
+    ] {
+        let out = sb.neet(&["test", slug]);
+        let stdout = String::from_utf8_lossy(&out.stdout);
+        assert!(out.status.success(), "{slug}: {stdout}{}", stderr(&out));
+        assert!(stdout.contains("passed ✓"), "{slug}: {stdout}");
+    }
+}
+
 /// A fake `claude` that appends its arguments (one per line, then `--`) to `log`.
 fn fake_claude(sb: &Sandbox, log: &Path) -> PathBuf {
     let script = sb.dir.join("fake-claude.sh");

@@ -1,13 +1,15 @@
 //! `neet test`: run your solution against the examples (plus a few edge cases).
 //!
-//! Claude writes a test harness once per problem and language; it is cached
-//! and appended to your code (everything above `MARKER`) to build a test file.
+//! A harness is appended to your code (everything above `MARKER`) to build a test file. In
+//! Python, problems with built-in cases use neet's generic harness (see `cases`); otherwise
+//! Claude writes a harness once per problem and language, and it is cached.
 
 use std::path::PathBuf;
 
 use anyhow::{Context, Result, bail};
 use chrono::Local;
 
+use crate::cases::{self, Availability};
 use crate::claude::{self, Coaching};
 use crate::config::Config;
 use crate::lang::Lang;
@@ -42,6 +44,20 @@ fn entry_point(lang: &Lang) -> &'static str {
 pub fn harness_prompt(store: &Store, cfg: &Config, p: &Problem) -> String {
     let lang = cfg.lang();
     let ctx = Coaching::gather(store, cfg, p);
+    let known = match cases::spec(store, p) {
+        Availability::Ready(spec) => format!(
+            "<verified_test_cases compare=\"{}\">\n{}\n</verified_test_cases>\n\n\
+             Use exactly these test cases, with these names and expected outputs (inputs are given \
+             by parameter name; `ops`/`args` is the usual LeetCode design-problem format; lists and \
+             trees are in LeetCode's array form). Add no other cases.\n\n",
+            serde_json::to_value(spec.compare)
+                .ok()
+                .and_then(|v| v.as_str().map(str::to_string))
+                .unwrap_or_default(),
+            serde_json::to_string_pretty(&spec.cases).unwrap_or_default()
+        ),
+        Availability::Unavailable(_) => String::new(),
+    };
     let signature = store
         .load_details(&p.slug)
         .and_then(|d| d.snippets.get(lang.lc_slug).cloned())
@@ -49,7 +65,7 @@ pub fn harness_prompt(store: &Store, cfg: &Config, p: &Problem) -> String {
     format!(
         "# Problem: {}\n\n<statement>\n{}\n</statement>\n\n\
 <reference_solution>\n{}\n</reference_solution>\n\n\
-<starter_code language=\"{}\">\n{}\n</starter_code>\n\n\
+<starter_code language=\"{}\">\n{}\n</starter_code>\n\n{}\
 Write a test harness in {} that will be appended directly AFTER the candidate's code \
 (which contains the starter code above, filled in, plus any ListNode/TreeNode definitions). \
 Requirements:\n\
@@ -75,6 +91,7 @@ Reply with only the harness code in a single fenced code block.",
         ctx.reference,
         lang.key,
         signature,
+        known,
         lang.key,
         entry_point(lang),
     )
@@ -104,8 +121,42 @@ pub fn extract_code(text: &str) -> Option<String> {
     None
 }
 
+/// Which harness a test run uses.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Source {
+    /// Built-in tests when available, else Claude's.
+    Auto,
+    /// Claude's, e.g. right after regenerating them.
+    Claude,
+}
+
+/// Claude's cached harness for this problem and language.
 pub fn load_harness(store: &Store, cfg: &Config, p: &Problem) -> Option<String> {
     std::fs::read_to_string(store.harness_path(p, cfg.lang())).ok()
+}
+
+/// neet's own harness, when the language has one and the problem has built-in cases.
+pub fn builtin_harness(store: &Store, cfg: &Config, p: &Problem) -> Option<String> {
+    if cfg.lang().key != "python" {
+        return None;
+    }
+    match cases::spec(store, p) {
+        Availability::Ready(spec) => Some(cases::python_harness(&spec)),
+        Availability::Unavailable(_) => None,
+    }
+}
+
+/// Whether testing needs Claude to write a harness first.
+pub fn needs_claude(store: &Store, cfg: &Config, p: &Problem, regenerate: bool) -> bool {
+    regenerate
+        || (builtin_harness(store, cfg, p).is_none() && load_harness(store, cfg, p).is_none())
+}
+
+fn harness(store: &Store, cfg: &Config, p: &Problem, source: Source) -> Option<String> {
+    match source {
+        Source::Auto => builtin_harness(store, cfg, p).or_else(|| load_harness(store, cfg, p)),
+        Source::Claude => load_harness(store, cfg, p),
+    }
 }
 
 pub fn save_harness(store: &Store, cfg: &Config, p: &Problem, response: &str) -> Result<PathBuf> {
@@ -117,12 +168,17 @@ pub fn save_harness(store: &Store, cfg: &Config, p: &Problem, response: &str) ->
 }
 
 /// Writes your solution + the harness into the build dir, returning the test file.
-pub fn build_test_file(store: &Store, cfg: &Config, p: &Problem) -> Result<PathBuf> {
+pub fn build_test_file(
+    store: &Store,
+    cfg: &Config,
+    p: &Problem,
+    source: Source,
+) -> Result<PathBuf> {
     let lang = cfg.lang();
     let sol = store.solution_path(p, lang);
     let code = std::fs::read_to_string(&sol)
         .with_context(|| format!("no solution yet at {}", sol.display()))?;
-    let harness = load_harness(store, cfg, p).context("no test harness generated yet")?;
+    let harness = harness(store, cfg, p, source).context("no test harness generated yet")?;
     if !code.contains(MARKER) && !matches!(lang.key, "python" | "javascript" | "typescript") {
         bail!(
             "{} has no `{MARKER}` line, so its own main would clash with the tests. \

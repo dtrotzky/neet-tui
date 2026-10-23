@@ -1,6 +1,8 @@
 mod actions;
+mod cases;
 mod claude;
 mod config;
+mod dev;
 mod highlight;
 mod lang;
 mod mock;
@@ -157,6 +159,41 @@ enum Cmd {
     Paths,
     /// Open the config file in your editor (or change settings in the TUI with `,`)
     Config,
+    /// Maintainer tools
+    #[command(hide = true, subcommand)]
+    Dev(DevCmd),
+}
+
+#[derive(Subcommand)]
+enum DevCmd {
+    /// Run the built-in tests against NeetCode's reference solutions
+    #[command(name = "check-tests")]
+    Check {
+        /// Only these problems (slugs)
+        problems: Vec<String>,
+    },
+    /// Generate edge cases into data/tests.json (inputs by Claude, outputs by the reference)
+    #[command(name = "gen-tests")]
+    Gen {
+        /// Only these problems (slugs)
+        problems: Vec<String>,
+        /// Model for writing the inputs
+        #[arg(long, default_value = "sonnet")]
+        model: String,
+        /// Regenerate problems that already have edge cases
+        #[arg(long)]
+        force: bool,
+        #[arg(long, short, default_value_t = 4)]
+        jobs: usize,
+        #[arg(long, default_value = "data/tests.json")]
+        file: std::path::PathBuf,
+    },
+    /// Rewrite data/tests.json in its canonical layout, dropping oversized cases
+    #[command(name = "tidy-tests")]
+    Tidy {
+        #[arg(long, default_value = "data/tests.json")]
+        file: std::path::PathBuf,
+    },
 }
 
 #[derive(Clone, Copy, ValueEnum)]
@@ -251,6 +288,19 @@ fn real_main() -> Result<()> {
     let find = |q: &str| actions::resolve(&problems, &store, q).cloned();
     match cmd {
         Cmd::Sync { .. } | Cmd::Paths | Cmd::Config => unreachable!(),
+        Cmd::Dev(DevCmd::Check { problems: only }) => {
+            dev::check_tests(&store, &problems, &only)?;
+        }
+        Cmd::Dev(DevCmd::Gen {
+            problems: only,
+            model,
+            force,
+            jobs,
+            file,
+        }) => {
+            dev::gen_tests(&store, &problems, &only, Some(model), force, jobs, &file)?;
+        }
+        Cmd::Dev(DevCmd::Tidy { file }) => dev::tidy_tests(&file)?,
         Cmd::List { filter } => {
             let today = srs::today();
             let mut last = "";
@@ -290,17 +340,28 @@ fn real_main() -> Result<()> {
         Cmd::Test { problem, regen } => {
             let p = find(&problem)?;
             let test_timeout = (cfg.run_timeout() * 2).max(MIN_TEST_TIMEOUT);
-            if regen || testing::load_harness(&store, &cfg, &p).is_none() {
+            let claude = testing::needs_claude(&store, &cfg, &p, regen);
+            if claude {
                 eprintln!("Claude is writing tests for {} (once)...", p.title);
             }
             let (output, result) =
                 actions::run_tests(&store, &cfg, &p, regen, test_timeout, &Cancel::default())?;
             println!("{}", sanitize(&output));
             println!("\n{}", testing::summary(&output));
-            eprintln!(
-                "(tests: {}; edit it or use --regen if a test looks wrong)",
-                store.harness_path(&p, cfg.lang()).display()
-            );
+            match cases::spec(&store, &p) {
+                cases::Availability::Ready(spec)
+                    if !claude && testing::builtin_harness(&store, &cfg, &p).is_some() =>
+                {
+                    eprintln!(
+                        "(built-in tests: {}; --regen has Claude write tests instead)",
+                        spec.describe()
+                    );
+                }
+                _ => eprintln!(
+                    "(tests: {}; edit it or use --regen if a test looks wrong)",
+                    store.harness_path(&p, cfg.lang()).display()
+                ),
+            }
             if !testing::all_passed(result) {
                 std::process::exit(1);
             }

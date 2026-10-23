@@ -644,7 +644,7 @@ impl App {
         let p = self.problems[idx].clone();
         match task.kind {
             Kind::Tests => match testing::save_harness(&self.store, &self.cfg, &p, &text) {
-                Ok(_) => self.spawn_tests(&p),
+                Ok(_) => self.spawn_tests(&p, testing::Source::Claude),
                 Err(e) => self.flash(format!("could not create tests: {e:#}")),
             },
             Kind::Mock => self.interviewer_replied(text),
@@ -789,7 +789,7 @@ impl App {
             return;
         }
         self.set_pane(Pane::Output);
-        if regenerate || testing::load_harness(&self.store, &self.cfg, &p).is_none() {
+        if testing::needs_claude(&self.store, &self.cfg, &p, regenerate) {
             if self.ai_busy() {
                 return;
             }
@@ -797,20 +797,21 @@ impl App {
             self.spawn_ai(p.slug.clone(), Kind::Tests, String::new(), prompt);
             return;
         }
-        self.spawn_tests(&p);
+        self.spawn_tests(&p, testing::Source::Auto);
     }
 
-    fn spawn_tests(&mut self, p: &Problem) {
+    fn spawn_tests(&mut self, p: &Problem, source: testing::Source) {
         let (tx, rx) = mpsc::channel();
         let cancel = Cancel::default();
         let job = cancel.clone();
         let (cfg, store, problem) = (self.cfg.clone(), self.store.clone(), p.clone());
         std::thread::spawn(move || {
             let timeout = cfg.run_timeout() * 2;
-            let out = match actions::run_existing_tests(&store, &cfg, &problem, timeout, &job) {
-                Ok((out, _)) => out,
-                Err(e) => format!("error: {e:#}"),
-            };
+            let out =
+                match actions::run_existing_tests(&store, &cfg, &problem, source, timeout, &job) {
+                    Ok((out, _)) => out,
+                    Err(e) => format!("error: {e:#}"),
+                };
             let _ = tx.send(out);
         });
         self.run = Some(RunTask {
@@ -2016,7 +2017,7 @@ impl App {
             Some((slug, out)) if *slug == p.slug => colorize_output(out),
             _ => Text::from(format!(
                 "t        test against the examples + edge cases (Claude writes the tests once)\n\
-                 ctrl-g   regenerate the tests\n\
+                 ctrl-g   have Claude write new tests\n\
                  T        run the file as-is: {}\n\n\
                  Tests are cached in {}",
                 self.cfg.run_cmd(),
@@ -2182,7 +2183,7 @@ fn draw_help(f: &mut Frame) {
         ("enter / e", "open your solution in your editor"),
         (
             "t / ctrl-g",
-            "test against examples + edge cases / regenerate tests",
+            "test against examples + edge cases / Claude writes new tests",
         ),
         ("T", "run your file as-is"),
         ("h", "nudge: question → insight → outline → pseudocode"),

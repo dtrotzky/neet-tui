@@ -51,11 +51,16 @@ shows the exact locations. The downloaded content is for your own practice; see 
 problem. `Enter` opens it in nvim (statement on the left, your file on the right), `t` tests it,
 `r` gets an interviewer-style review. Stuck? `h` nudges you one step at a time.
 
-**Tests (`t`).** The first time you test a problem, Claude writes a harness with the statement's
-examples plus a few edge cases (order-insensitive where the problem allows it), cached in
-`~/.local/share/neet/tests/`. Everything below the `---- neet: scratch checks below ...` line in
-your file is your scratch space and is replaced by the harness when testing. `ctrl-g` (or
-`neet test --regen`) writes new tests if one looks wrong.
+**Tests (`t`).** In Python, 233 of the 250 problems have built-in tests that need no Claude:
+the statement's examples plus a few edge cases shipped with neet, whose expected outputs were
+computed with NeetCode's reference solutions. Answers that may come in any order are compared
+that way, design problems (LRU Cache, ...) run their operation sequences, and in-place problems
+check the modified input. For the rest (several valid answers, node references as input, ...)
+and for other languages, Claude writes a harness the first time you test a problem, using the
+same cases where there are some, cached in `~/.local/share/neet/tests/`. Everything below the
+`---- neet: scratch checks below ...` line in your file is your scratch space and is replaced by
+the harness when testing. `ctrl-g` (or `neet test --regen`) has Claude write new tests if one
+looks wrong.
 
 **Spaced repetition.** A solved problem comes back for review after 1, 3, 7, 21 and 60 days,
 then counts as mastered. Due problems show `⟳` and are listed under `D` / `neet due`. Solve one
@@ -98,7 +103,7 @@ pattern, for the night before an interview.
 | `J`/`K`, `ctrl-d`/`ctrl-u` | scroll the right pane |
 | `1`-`5`, `tab` | Problem / Solution / Claude / Output / Stats pane |
 | `enter` / `e` | open your solution in nvim, with the statement in a read-only split |
-| `t` / `ctrl-g` | test against examples and edge cases / regenerate the tests |
+| `t` / `ctrl-g` | test against examples and edge cases / have Claude write new tests |
 | `T` | run your file as-is (20 s timeout) |
 | `h` | **nudge**: escalates question → key insight → outline → pseudocode, never full code |
 | `r` | **review** like an interviewer: verdict, bugs, complexity, tips, likely follow-up. `PASS` marks it solved |
@@ -216,9 +221,10 @@ Solution files go in `<workspace>/<language>/<NNNN-slug>.<ext>` (old attempts in
 `attempts/`), with the starter code, the example inputs as comments, and a scratch `main`
 block below the marker line.
 
-**Note on tests:** test harnesses are code written by Claude and run on your machine, like your
-own solution. Claude is told not to touch files, the network or other processes, and every
-harness is a plain file you can read in `~/.local/share/neet/tests/` before trusting it.
+**Note on tests:** Claude-written test harnesses are code run on your machine, like your own
+solution. Claude is told not to touch files, the network or other processes, and every harness
+is a plain file you can read in `~/.local/share/neet/tests/` before trusting it. The built-in
+harness is part of neet (`src/harness.py`).
 
 ## Roadmap
 
