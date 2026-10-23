@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- The chat next to your code (`chat_in_editor`) also shows the problem statement, like `Enter`
+  does (unless the statement split is turned off).
+- The bottom bar lists `c` for the chat.
+
 ## 0.2.0
 
 - Built-in tests for 233 of the 250 problems in Python, without Claude: the statement's examples

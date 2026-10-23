@@ -263,6 +263,10 @@ fn is_neovim(cfg: &Config) -> bool {
 
 /// Builds the editor invocation; vim/nvim also get the statement in a read-only
 /// split, and Neovim gets interview mode when `lsp` is false.
+/// Window options for the read-only problem statement next to the solution.
+const STATEMENT_WINDOW: &str =
+    "setlocal readonly nomodifiable wrap linebreak nonumber norelativenumber filetype=markdown";
+
 pub fn editor_command(cfg: &Config, solution: &Path, description: &Path, lsp: bool) -> Command {
     let (mut cmd, is_vim) = editor_base(cfg);
     if !lsp && is_neovim(cfg) {
@@ -272,13 +276,11 @@ pub fn editor_command(cfg: &Config, solution: &Path, description: &Path, lsp: bo
     if is_vim && cfg.split_description && description.exists() {
         // Both files are passed as arguments (not spliced into an Ex command),
         // so paths need no escaping. `-c` runs in the first window: the statement.
-        cmd.args([
-            "-c",
-            "setlocal readonly nomodifiable wrap linebreak nonumber norelativenumber \
-             filetype=markdown | vertical resize 80 | wincmd l",
-            "-O",
-            "--",
-        ]);
+        cmd.arg("-c")
+            .arg(format!(
+                "{STATEMENT_WINDOW} | vertical resize 80 | wincmd l"
+            ))
+            .args(["-O", "--"]);
         cmd.arg(description);
     } else if is_vim {
         cmd.arg("--");
@@ -384,7 +386,11 @@ pub fn chat(store: &Store, cfg: &Config, p: &Problem, fresh: bool, lsp: bool) ->
             line.push_str(&shell_quote(Path::new(a)));
         }
         std::fs::write(&script, format!("#!/bin/sh\n{line}\n"))?;
-        let spent = run_editor(cfg, chat_editor_command(cfg, &sol, &script, lsp))?;
+        let description = store.description_path(&p.slug);
+        let spent = run_editor(
+            cfg,
+            chat_editor_command(cfg, &sol, &description, &script, lsp),
+        )?;
         store.update_progress(|progress| {
             progress
                 .entries
@@ -402,12 +408,24 @@ pub fn chat(store: &Store, cfg: &Config, p: &Problem, fresh: bool, lsp: bool) ->
     Ok(())
 }
 
-/// Neovim with the solution on the left and a terminal running `script` on the right.
-fn chat_editor_command(cfg: &Config, solution: &Path, script: &Path, lsp: bool) -> Command {
+/// Neovim with the statement (if `split_description`), the solution, and a terminal
+/// running `script` on the right, in equal columns.
+fn chat_editor_command(
+    cfg: &Config,
+    solution: &Path,
+    description: &Path,
+    script: &Path,
+    lsp: bool,
+) -> Command {
     let (mut cmd, _) = editor_base(cfg);
     if !lsp {
         cmd.arg("--cmd")
             .arg(format!("lua {}", INTERVIEW_LUA.join(" ")));
+    }
+    let statement = cfg.split_description && description.exists();
+    if statement {
+        // Runs first, in the statement's window, then moves to the solution.
+        cmd.arg("-c").arg(format!("{STATEMENT_WINDOW} | wincmd l"));
     }
     let script = lua_quote(&script.display().to_string());
     // The chat job is stopped on exit, so `:wqa` works without `!` (the transcript is
@@ -419,10 +437,14 @@ fn chat_editor_command(cfg: &Config, solution: &Path, script: &Path, lsp: bool) 
              if vim.fn.has('nvim-0.11') == 1 then job = vim.fn.jobstart({{'sh', {script}}}, {{term = true}}) \
              else job = vim.fn.termopen({{'sh', {script}}}) end; \
              vim.api.nvim_create_autocmd('ExitPre', {{callback = function() pcall(vim.fn.jobstop, job) end}}); \
-             vim.cmd('startinsert')"
+             vim.cmd('wincmd ='); vim.cmd('startinsert')"
         ),
-        "--",
     ]);
+    if statement {
+        cmd.args(["-O", "--"]).arg(description);
+    } else {
+        cmd.arg("--");
+    }
     cmd.arg(solution);
     cmd
 }
@@ -755,6 +777,42 @@ mod tests {
             fill_placeholders("echo {x} {file", "F", "B"),
             "echo {x} {file"
         );
+    }
+
+    #[test]
+    fn chat_split_includes_the_statement() {
+        let dir = std::env::temp_dir().join(format!("neet-{}-chat-split", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let description = dir.join("description.md");
+        std::fs::write(&description, "# Two Sum").unwrap();
+        let (sol, script) = (dir.join("0001-two-sum.py"), dir.join("chat.sh"));
+        let mut cfg = Config {
+            editor: Some("nvim".into()),
+            ..Config::default()
+        };
+        let args = |cfg: &Config| -> Vec<String> {
+            chat_editor_command(cfg, &sol, &description, &script, true)
+                .get_args()
+                .map(|a| a.to_string_lossy().into_owned())
+                .collect()
+        };
+        let with = args(&cfg);
+        let tail: Vec<&str> = with
+            .iter()
+            .rev()
+            .take(4)
+            .rev()
+            .map(String::as_str)
+            .collect();
+        let (d, s) = (description.display().to_string(), sol.display().to_string());
+        assert_eq!(tail, ["-O", "--", d.as_str(), s.as_str()]);
+        assert!(with[1].starts_with(STATEMENT_WINDOW), "{with:?}");
+
+        cfg.split_description = false;
+        let without = args(&cfg);
+        assert!(!without.contains(&d), "{without:?}");
+        assert_eq!(without.last(), Some(&s));
+        let _ = std::fs::remove_dir_all(dir);
     }
 
     #[test]
