@@ -587,6 +587,6 @@ fn bars(problems: &[Problem], progress: &store::Progress) {
 }
 
 fn bar(done: usize, total: usize, width: usize) -> String {
-    let filled = if total == 0 { 0 } else { done * width / total };
+    let filled = (done * width).checked_div(total).unwrap_or(0).min(width);
     format!("{}{}", "█".repeat(filled), "░".repeat(width - filled))
 }
