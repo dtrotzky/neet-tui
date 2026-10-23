@@ -11,12 +11,12 @@ use std::time::Duration;
 use anyhow::{Context, Result, bail};
 use serde_json::{Value, json};
 
-use crate::claude;
+use crate::coach::claude;
 use crate::config::Config;
-use crate::lang::LANGS;
-use crate::proc::Cancel;
+use crate::judge::proc::Cancel;
+use crate::model::lang::LANGS;
+use crate::model::store::{Details, Problem, Store, is_safe_ident, pattern_rank, write_json};
 use crate::render::sanitize;
-use crate::store::{Details, Problem, Store, is_safe_ident, pattern_rank, write_json};
 
 const PRACTICE_URL: &str = "https://neetcode.io/practice";
 const TARBALL_URL: &str = "https://codeload.github.com/neetcode-gh/leetcode/tar.gz/refs/heads/main";
@@ -116,8 +116,8 @@ fn fetch_lists_from_site() -> Result<Vec<Problem>> {
 
 /// Snapshot of the lists (titles, slugs, patterns, flags; no statements or solutions), used
 /// when neetcode.io's bundle can't be parsed. To refresh it, run `neet sync` and copy
-/// `<data>/problems.json` here with one problem per line.
-const BUNDLED_LISTS: &str = include_str!("../data/problems.json");
+/// `<data>/problems.json` to `assets/problems.json` with one problem per line.
+const BUNDLED_LISTS: &str = include_str!("../../assets/problems.json");
 
 fn bundled_lists() -> Result<Vec<Problem>> {
     serde_json::from_str(BUNDLED_LISTS).context("bundled problem list is invalid")

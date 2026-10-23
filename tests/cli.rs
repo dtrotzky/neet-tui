@@ -8,7 +8,7 @@ use std::process::{Command, Output};
 
 use serde_json::Value;
 
-const PROBLEMS: &str = include_str!("../data/problems.json");
+const PROBLEMS: &str = include_str!("../assets/problems.json");
 const MARKER: &str =
     "---- neet: scratch checks below; `neet test` replaces everything from here ----";
 
@@ -320,7 +320,7 @@ fn builtin_tests_run_without_claude() {
     let out = sb.neet(&["test", "two-sum"]);
     let stdout = String::from_utf8_lossy(&out.stdout);
     assert!(out.status.success(), "{stdout}{}", stderr(&out));
-    // The three statement examples, plus whatever edge cases data/tests.json ships.
+    // The three statement examples, plus whatever edge cases assets/tests.json ships.
     assert!(stdout.contains("PASS example 3"), "{stdout}");
     assert!(stdout.contains("passed ✓"), "{stdout}");
     assert!(stderr(&out).contains("built-in tests"), "{}", stderr(&out));
@@ -380,7 +380,7 @@ fn builtin_tests_handle_trees_design_in_place_and_nested_order() {
         "0048-rotate-image",
         "class Solution:\n    def rotate(self, matrix):\n        matrix[:] = [list(r) for r in zip(*matrix[::-1])]",
     );
-    // group-anagrams compares nested lists in any order (data/tests.json).
+    // group-anagrams compares nested lists in any order (assets/tests.json).
     seed(
         &sb,
         "group-anagrams",

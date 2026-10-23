@@ -1,21 +1,6 @@
-mod actions;
-mod cases;
-mod claude;
-mod config;
-mod dev;
-mod highlight;
-mod lang;
-mod mock;
-mod proc;
-mod render;
-mod settings;
-mod srs;
-mod stats;
-mod store;
-mod sync;
-mod testing;
-mod tui;
-mod xdg;
+//! The `neet` command line: argument parsing and the commands that aren't the TUI.
+
+pub mod dev;
 
 use std::io::{BufRead, Write};
 use std::time::{Duration, Instant};
@@ -24,11 +9,18 @@ use anyhow::{Result, bail};
 use chrono::Local;
 use clap::{Parser, Subcommand, ValueEnum};
 
-use crate::claude::Kind;
+use crate::coach::claude::{self, Kind};
+use crate::coach::mock;
 use crate::config::Config;
-use crate::proc::Cancel;
+use crate::judge::proc::Cancel;
+use crate::judge::{cases, harness};
+use crate::model::store::{MockRecord, Problem, Status, Store};
+use crate::model::{srs, stats, store};
+use crate::practice;
+use crate::render;
 use crate::render::sanitize;
-use crate::store::{MockRecord, Problem, Status, Store};
+use crate::sync;
+use crate::tui;
 
 /// Minimum timeout for `neet test` runs from the CLI (includes compiling).
 const MIN_TEST_TIMEOUT: Duration = Duration::from_secs(60);
@@ -172,7 +164,7 @@ enum DevCmd {
         /// Only these problems (slugs)
         problems: Vec<String>,
     },
-    /// Generate edge cases into data/tests.json (inputs by Claude, outputs by the reference)
+    /// Generate edge cases into assets/tests.json (inputs by Claude, outputs by the reference)
     #[command(name = "gen-tests")]
     Gen {
         /// Only these problems (slugs)
@@ -185,13 +177,13 @@ enum DevCmd {
         force: bool,
         #[arg(long, short, default_value_t = 4)]
         jobs: usize,
-        #[arg(long, default_value = "data/tests.json")]
+        #[arg(long, default_value = "assets/tests.json")]
         file: std::path::PathBuf,
     },
-    /// Rewrite data/tests.json in its canonical layout, dropping oversized cases
+    /// Rewrite assets/tests.json in its canonical layout, dropping oversized cases
     #[command(name = "tidy-tests")]
     Tidy {
-        #[arg(long, default_value = "data/tests.json")]
+        #[arg(long, default_value = "assets/tests.json")]
         file: std::path::PathBuf,
     },
 }
@@ -244,19 +236,8 @@ impl Difficulty {
     }
 }
 
-fn main() {
-    // Behave like a normal CLI when piped into `head` etc.
-    // SAFETY: called before any threads exist; restores the default disposition.
-    unsafe {
-        libc::signal(libc::SIGPIPE, libc::SIG_DFL);
-    }
-    if let Err(e) = real_main() {
-        eprintln!("error: {e:#}");
-        std::process::exit(1);
-    }
-}
-
-fn real_main() -> Result<()> {
+/// Parses the command line and runs the command (the TUI without one).
+pub fn run() -> Result<()> {
     let cli = Cli::parse();
     // Before loading the config, so a broken config can still be fixed this way.
     if let Some(Cmd::Config) = cli.command {
@@ -285,7 +266,7 @@ fn real_main() -> Result<()> {
 
     let problems = store.load_problems()?;
     let progress = store.load_progress()?;
-    let find = |q: &str| actions::resolve(&problems, &store, q).cloned();
+    let find = |q: &str| practice::resolve(&problems, &store, q).cloned();
     match cmd {
         Cmd::Sync { .. } | Cmd::Paths | Cmd::Config => unreachable!(),
         Cmd::Dev(DevCmd::Check { problems: only }) => {
@@ -327,12 +308,12 @@ fn real_main() -> Result<()> {
             );
         }
         Cmd::Edit { problem } => {
-            actions::edit(&store, &cfg, &find(&problem)?, cfg.lsp_enabled(false))?;
+            practice::edit(&store, &cfg, &find(&problem)?, cfg.lsp_enabled(false))?;
         }
         Cmd::Run { problem } => {
             let p = find(&problem)?;
             let status =
-                actions::run_interactive(&cfg, &store, &store.solution_path(&p, cfg.lang()))?;
+                practice::run_interactive(&cfg, &store, &store.solution_path(&p, cfg.lang()))?;
             if !status.success() {
                 std::process::exit(status.code().unwrap_or(1));
             }
@@ -340,17 +321,17 @@ fn real_main() -> Result<()> {
         Cmd::Test { problem, regen } => {
             let p = find(&problem)?;
             let test_timeout = (cfg.run_timeout() * 2).max(MIN_TEST_TIMEOUT);
-            let claude = testing::needs_claude(&store, &cfg, &p, regen);
+            let claude = harness::needs_claude(&store, &cfg, &p, regen);
             if claude {
                 eprintln!("Claude is writing tests for {} (once)...", p.title);
             }
             let (output, result) =
-                actions::run_tests(&store, &cfg, &p, regen, test_timeout, &Cancel::default())?;
+                practice::run_tests(&store, &cfg, &p, regen, test_timeout, &Cancel::default())?;
             println!("{}", sanitize(&output));
-            println!("\n{}", testing::summary(&output));
+            println!("\n{}", harness::summary(&output));
             match cases::spec(&store, &p) {
                 cases::Availability::Ready(spec)
-                    if !claude && testing::builtin_harness(&store, &cfg, &p).is_some() =>
+                    if !claude && harness::builtin_harness(&store, &cfg, &p).is_some() =>
                 {
                     eprintln!(
                         "(built-in tests: {}; --regen has Claude write tests instead)",
@@ -362,12 +343,12 @@ fn real_main() -> Result<()> {
                     store.harness_path(&p, cfg.lang()).display()
                 ),
             }
-            if !testing::all_passed(result) {
+            if !harness::all_passed(result) {
                 std::process::exit(1);
             }
         }
         Cmd::Chat { problem, new } => {
-            actions::chat(&store, &cfg, &find(&problem)?, new, cfg.lsp_enabled(false))?;
+            practice::chat(&store, &cfg, &find(&problem)?, new, cfg.lsp_enabled(false))?;
         }
         Cmd::Hint { problem } => coach(&store, &cfg, &find(&problem)?, Kind::Hint, "")?,
         Cmd::Review { problem } => coach(&store, &cfg, &find(&problem)?, Kind::Review, "")?,
@@ -380,7 +361,7 @@ fn real_main() -> Result<()> {
         }
         Cmd::Solution { problem } => {
             let p = find(&problem)?;
-            actions::mark_revealed(&store, &p)?;
+            practice::mark_revealed(&store, &p)?;
             match store.load_article(&p.slug) {
                 Some(a) => print!("{}", sanitize(&render::filter_article(&a, cfg.lang()))),
                 None => match store.load_ref_solution(&p.slug, cfg.lang()) {
@@ -391,7 +372,7 @@ fn real_main() -> Result<()> {
         }
         Cmd::Done { problem, undo } => {
             let p = find(&problem)?;
-            let (_, outcome) = actions::set_solved(&store, &p, !undo)?;
+            let (_, outcome) = practice::set_solved(&store, &p, !undo)?;
             println!("{}", outcome.describe(&p.title));
         }
         Cmd::Due => {
@@ -426,9 +407,9 @@ fn real_main() -> Result<()> {
         } => {
             let include = |p: &Problem| filter.matches(p);
             let pick = if random {
-                actions::random_unsolved(&problems, &progress, include)
+                practice::random_unsolved(&problems, &progress, include)
             } else {
-                actions::next_unsolved(&problems, &progress, include, None)
+                practice::next_unsolved(&problems, &progress, include, None)
             };
             let Some(i) = pick else {
                 println!("Everything matching is solved. Nice!");
@@ -440,14 +421,14 @@ fn real_main() -> Result<()> {
                 p.title, p.difficulty, p.pattern, p.slug
             );
             if edit {
-                actions::edit(&store, &cfg, p, cfg.lsp_enabled(false))?;
+                practice::edit(&store, &cfg, p, cfg.lsp_enabled(false))?;
             }
         }
         Cmd::Mock { problem, filter } => {
             let p = match problem {
                 Some(q) => find(&q)?,
                 None => {
-                    let i = actions::random_unsolved(&problems, &progress, |p| filter.matches(p))
+                    let i = practice::random_unsolved(&problems, &progress, |p| filter.matches(p))
                         .ok_or_else(|| anyhow::anyhow!("no unsolved problem matches"))?;
                     problems[i].clone()
                 }
@@ -456,19 +437,19 @@ fn real_main() -> Result<()> {
         }
         Cmd::Fresh { problem } => {
             let p = find(&problem)?;
-            match actions::fresh_attempt(&store, &cfg, &p)? {
+            match practice::fresh_attempt(&store, &cfg, &p)? {
                 Some(old) => println!("Previous attempt archived to {}", old.display()),
                 None => println!("No previous attempt; created a fresh starter file."),
             }
         }
         Cmd::Notes { problem, export } => {
             if export {
-                print!("{}", actions::export_notes(&store, &problems));
+                print!("{}", practice::export_notes(&store, &problems));
             } else {
                 let Some(q) = problem else {
                     bail!("usage: neet notes <problem>  or  neet notes --export");
                 };
-                actions::edit_notes(&store, &cfg, &find(&q)?)?;
+                practice::edit_notes(&store, &cfg, &find(&q)?)?;
             }
         }
         Cmd::Stats { list, coach } => {
@@ -534,10 +515,10 @@ fn stream_claude(cfg: &Config, kind: Kind, prompt: &str) -> Result<String> {
 }
 
 fn coach(store: &Store, cfg: &Config, p: &Problem, kind: Kind, question: &str) -> Result<()> {
-    let prompt = actions::prompt_for(store, cfg, p, kind, question)?;
+    let prompt = practice::prompt_for(store, cfg, p, kind, question)?;
     eprintln!("Claude is thinking about {}...\n", p.title);
     let text = stream_claude(cfg, kind, &prompt)?;
-    let (verdict, solve) = actions::record_ai(store, p, kind, question, &text)?;
+    let (verdict, solve) = practice::record_ai(store, p, kind, question, &text)?;
     match (verdict, solve) {
         (Some(true), Some(s)) => println!("\n{}", s.describe(&p.title)),
         (Some(false), _) => println!("\nNot quite there yet. Keep going!"),
@@ -569,13 +550,13 @@ fn mock_cli(store: &Store, cfg: &Config, p: &Problem) -> Result<()> {
     if read_line("Press Enter to start the clock (q to cancel) ")?.as_deref() == Some("q") {
         return Ok(());
     }
-    if let Some(old) = actions::fresh_attempt(store, cfg, p)? {
+    if let Some(old) = practice::fresh_attempt(store, cfg, p)? {
         println!("(previous attempt archived to {})", old.display());
     }
     let started = Local::now();
     let clock = Instant::now();
     loop {
-        actions::edit(store, cfg, p, cfg.lsp_enabled(true))?;
+        practice::edit(store, cfg, p, cfg.lsp_enabled(true))?;
         let elapsed = clock.elapsed();
         println!(
             "\nTime: {} of {}{}",
@@ -616,7 +597,7 @@ fn mock_cli(store: &Store, cfg: &Config, p: &Problem) -> Result<()> {
         .last()
         .and_then(|(_, t)| mock::result_of(t));
     let md = transcript.to_markdown();
-    actions::record_ai(store, p, Kind::Mock, "", &md)?;
+    practice::record_ai(store, p, Kind::Mock, "", &md)?;
     record_mock(store, p, started, elapsed, limit, result)
 }
 

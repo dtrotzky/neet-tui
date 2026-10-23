@@ -9,12 +9,12 @@ use std::time::{Duration, Instant};
 use anyhow::{Context, Result, bail};
 use chrono::{Local, NaiveDate};
 
-use crate::claude::{self, Kind};
+use crate::coach::claude::{self, Kind};
 use crate::config::Config;
-use crate::proc::{self, Cancel};
-use crate::srs;
-use crate::store::{AiEntry, ChatSession, Problem, Progress, Status, Store};
-use crate::testing;
+use crate::judge::harness;
+use crate::judge::proc::{self, Cancel};
+use crate::model::srs;
+use crate::model::store::{AiEntry, ChatSession, Problem, Progress, Status, Store};
 
 /// Editor sessions longer than this were probably left open; count only this much.
 const MAX_SESSION: Duration = Duration::from_secs(3 * 3600);
@@ -150,7 +150,7 @@ pub fn prompt_for(
         }
         Kind::Review => claude::review_prompt(&ctx),
         Kind::Ask => claude::ask_prompt(&ctx, question),
-        Kind::Tests => testing::harness_prompt(store, cfg, p),
+        Kind::Tests => harness::harness_prompt(store, cfg, p),
         other => bail!("{} prompts are built elsewhere", other.label()),
     })
 }
@@ -602,12 +602,12 @@ pub fn run_tests(
     timeout: Duration,
     cancel: &Cancel,
 ) -> Result<(String, Option<(u32, u32)>)> {
-    testing::ensure_has_solution(store, cfg, p)?;
-    let source = if testing::needs_claude(store, cfg, p, regenerate) {
-        testing::generate(store, cfg, p)?;
-        testing::Source::Claude
+    harness::ensure_has_solution(store, cfg, p)?;
+    let source = if harness::needs_claude(store, cfg, p, regenerate) {
+        harness::generate(store, cfg, p)?;
+        harness::Source::Claude
     } else {
-        testing::Source::Auto
+        harness::Source::Auto
     };
     run_existing_tests(store, cfg, p, source, timeout, cancel)
 }
@@ -617,15 +617,15 @@ pub fn run_existing_tests(
     store: &Store,
     cfg: &Config,
     p: &Problem,
-    source: testing::Source,
+    source: harness::Source,
     timeout: Duration,
     cancel: &Cancel,
 ) -> Result<(String, Option<(u32, u32)>)> {
-    let file = testing::build_test_file(store, cfg, p, source)?;
+    let file = harness::build_test_file(store, cfg, p, source)?;
     let output = run_captured(cfg, store, &file, timeout, cancel)?;
-    let result = testing::parse_result(&output);
+    let result = harness::parse_result(&output);
     if let Some((passed, total)) = result {
-        testing::record(store, p, passed, total)?;
+        harness::record(store, p, passed, total)?;
     }
     Ok((output, result))
 }

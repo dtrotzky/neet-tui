@@ -3,9 +3,9 @@
 
 use std::time::Duration;
 
-use crate::claude::Coaching;
+use crate::coach::claude::Coaching;
 use crate::config::Config;
-use crate::store::Problem;
+use crate::model::store::Problem;
 
 /// Final debrief line, e.g. `MOCK RESULT: Lean Hire`.
 const RESULT_PREFIX: &str = "MOCK RESULT:";

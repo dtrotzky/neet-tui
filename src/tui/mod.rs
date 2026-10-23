@@ -22,17 +22,17 @@ use ratatui::widgets::{
 };
 use ratatui::{DefaultTerminal, Frame};
 
-use crate::actions;
-use crate::claude::{self, Kind};
+use crate::coach::claude::{self, Kind};
+use crate::coach::mock::{self, Speaker, Transcript};
 use crate::config::Config;
-use crate::mock::{self, Speaker, Transcript};
-use crate::proc::Cancel;
+use crate::config::settings::{self, Control, Setting};
+use crate::judge::harness;
+use crate::judge::proc::Cancel;
+use crate::model::srs;
+use crate::model::stats;
+use crate::model::store::{MockRecord, Problem, Progress, Status, Store, UiState};
+use crate::practice;
 use crate::render;
-use crate::settings::{self, Control, Setting};
-use crate::srs;
-use crate::stats;
-use crate::store::{MockRecord, Problem, Progress, Status, Store, UiState};
-use crate::testing;
 
 const SPINNER: &[&str] = &["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 const TICK: Duration = Duration::from_millis(80);
@@ -609,7 +609,7 @@ impl App {
         {
             match run.kind {
                 RunKind::Tests => {
-                    self.flash(testing::summary(&out));
+                    self.flash(harness::summary(&out));
                     self.reload_progress();
                 }
                 RunKind::Raw => self.flash("run finished, see Output (4)"),
@@ -643,13 +643,13 @@ impl App {
         };
         let p = self.problems[idx].clone();
         match task.kind {
-            Kind::Tests => match testing::save_harness(&self.store, &self.cfg, &p, &text) {
-                Ok(_) => self.spawn_tests(&p, testing::Source::Claude),
+            Kind::Tests => match harness::save_harness(&self.store, &self.cfg, &p, &text) {
+                Ok(_) => self.spawn_tests(&p, harness::Source::Claude),
                 Err(e) => self.flash(format!("could not create tests: {e:#}")),
             },
             Kind::Mock => self.interviewer_replied(text),
             _ => {
-                match actions::record_ai(&self.store, &p, task.kind, &task.question, &text) {
+                match practice::record_ai(&self.store, &p, task.kind, &task.question, &text) {
                     Ok((Some(true), Some(solve))) => {
                         self.flash(format!("Claude: PASS. {}", solve.describe(&p.title)));
                     }
@@ -695,7 +695,7 @@ impl App {
             self.flash("nothing to review yet, press enter to start coding");
             return;
         }
-        match actions::prompt_for(&self.store, &self.cfg, &p, kind, &question) {
+        match practice::prompt_for(&self.store, &self.cfg, &p, kind, &question) {
             Ok(prompt) => {
                 self.spawn_ai(p.slug.clone(), kind, question, prompt);
                 self.set_pane(Pane::Claude);
@@ -761,7 +761,7 @@ impl App {
         let cfg = self.cfg.clone();
         let store = self.store.clone();
         std::thread::spawn(move || {
-            let out = actions::run_captured(&cfg, &store, &path, cfg.run_timeout(), &job)
+            let out = practice::run_captured(&cfg, &store, &path, cfg.run_timeout(), &job)
                 .unwrap_or_else(|e| format!("error: {e:#}"));
             let _ = tx.send(out);
         });
@@ -784,23 +784,23 @@ impl App {
         let Some(p) = self.selected().cloned() else {
             return;
         };
-        if let Err(e) = testing::ensure_has_solution(&self.store, &self.cfg, &p) {
+        if let Err(e) = harness::ensure_has_solution(&self.store, &self.cfg, &p) {
             self.flash(format!("{e:#}"));
             return;
         }
         self.set_pane(Pane::Output);
-        if testing::needs_claude(&self.store, &self.cfg, &p, regenerate) {
+        if harness::needs_claude(&self.store, &self.cfg, &p, regenerate) {
             if self.ai_busy() {
                 return;
             }
-            let prompt = testing::harness_prompt(&self.store, &self.cfg, &p);
+            let prompt = harness::harness_prompt(&self.store, &self.cfg, &p);
             self.spawn_ai(p.slug.clone(), Kind::Tests, String::new(), prompt);
             return;
         }
-        self.spawn_tests(&p, testing::Source::Auto);
+        self.spawn_tests(&p, harness::Source::Auto);
     }
 
-    fn spawn_tests(&mut self, p: &Problem, source: testing::Source) {
+    fn spawn_tests(&mut self, p: &Problem, source: harness::Source) {
         let (tx, rx) = mpsc::channel();
         let cancel = Cancel::default();
         let job = cancel.clone();
@@ -808,7 +808,7 @@ impl App {
         std::thread::spawn(move || {
             let timeout = cfg.run_timeout() * 2;
             let out =
-                match actions::run_existing_tests(&store, &cfg, &problem, source, timeout, &job) {
+                match practice::run_existing_tests(&store, &cfg, &problem, source, timeout, &job) {
                     Ok((out, _)) => out,
                     Err(e) => format!("error: {e:#}"),
                 };
@@ -839,7 +839,7 @@ impl App {
     fn start_mock(&mut self, idx: usize) {
         let p = self.problems[idx].clone();
         self.cancel_tasks();
-        match actions::fresh_attempt(&self.store, &self.cfg, &p) {
+        match practice::fresh_attempt(&self.store, &self.cfg, &p) {
             Ok(archived) => {
                 let limit = mock::time_limit(&self.cfg, &p);
                 self.mock = Some(MockState {
@@ -930,7 +930,7 @@ impl App {
             .and_then(|(_, t)| mock::result_of(t));
         if debriefed && let Some(d) = &m.debrief {
             let _ =
-                actions::record_ai(&self.store, &p, Kind::Mock, "", &d.transcript.to_markdown());
+                practice::record_ai(&self.store, &p, Kind::Mock, "", &d.transcript.to_markdown());
         }
         let record = MockRecord {
             slug: p.slug.clone(),
@@ -1189,16 +1189,16 @@ impl App {
             External::Edit(i) => {
                 let p = self.problems[i].clone();
                 let lsp = self.cfg.lsp_enabled(self.mock.is_some());
-                actions::edit(&self.store, &self.cfg, &p, lsp)?;
+                practice::edit(&self.store, &self.cfg, &p, lsp)?;
             }
             External::Notes(i) => {
                 let p = self.problems[i].clone();
-                actions::edit_notes(&self.store, &self.cfg, &p)?;
+                practice::edit_notes(&self.store, &self.cfg, &p)?;
             }
             External::Tutor(i, fresh) => {
                 let p = self.problems[i].clone();
                 let lsp = self.cfg.lsp_enabled(false);
-                actions::chat(&self.store, &self.cfg, &p, fresh, lsp)?;
+                practice::chat(&self.store, &self.cfg, &p, fresh, lsp)?;
             }
         }
         self.touch();
@@ -1286,7 +1286,7 @@ impl App {
                     (Confirm::Quit, KeyCode::Char('y')) => self.quit = true,
                     (Confirm::Fresh(i), KeyCode::Char('y')) => {
                         let p = self.problems[i].clone();
-                        match actions::fresh_attempt(&self.store, &self.cfg, &p) {
+                        match practice::fresh_attempt(&self.store, &self.cfg, &p) {
                             Ok(Some(old)) => {
                                 self.flash(format!("fresh start; old attempt in {}", tilde(&old)))
                             }
@@ -1450,9 +1450,9 @@ impl App {
                     _ => true,
                 };
                 let pick = if random {
-                    actions::random_unsolved(&self.problems, &self.progress, include)
+                    practice::random_unsolved(&self.problems, &self.progress, include)
                 } else {
-                    actions::next_unsolved(
+                    practice::next_unsolved(
                         &self.problems,
                         &self.progress,
                         include,
@@ -1499,7 +1499,7 @@ impl App {
                 }
                 if let Some(p) = self.selected().cloned() {
                     let was_due = self.is_due(&p);
-                    let res = actions::mark_revealed(&self.store, &p);
+                    let res = practice::mark_revealed(&self.store, &p);
                     self.set_progress(res);
                     if was_due {
                         self.flash("solution viewed during a review: review restarts tomorrow");
@@ -1510,7 +1510,7 @@ impl App {
                 if let Some(p) = self.selected().cloned() {
                     // Solved and not due: toggle off. Otherwise solve / complete the review.
                     let solve = self.status_of(&p) != Status::Solved || self.is_due(&p);
-                    match actions::set_solved(&self.store, &p, solve) {
+                    match practice::set_solved(&self.store, &p, solve) {
                         Ok((progress, outcome)) => {
                             self.set_progress(Ok(progress));
                             self.flash(outcome.describe(&p.title));
@@ -1837,7 +1837,7 @@ impl App {
         if let Some(notes) = self
             .store
             .load_notes(p)
-            .map(|n| actions::notes_body(&n))
+            .map(|n| practice::notes_body(&n))
             .filter(|n| !n.is_empty())
         {
             lines.push(Line::raw(""));
@@ -2257,7 +2257,11 @@ mod tests {
             workspace: dir.join("workspace"),
         };
         std::fs::create_dir_all(&store.root).unwrap();
-        std::fs::write(store.problems_path(), include_str!("../data/problems.json")).unwrap();
+        std::fs::write(
+            store.problems_path(),
+            include_str!("../../assets/problems.json"),
+        )
+        .unwrap();
         let cfg = Config {
             language: "python".into(),
             ..Config::default()

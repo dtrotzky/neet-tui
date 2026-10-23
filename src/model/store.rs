@@ -7,7 +7,7 @@ use chrono::{DateTime, Local, NaiveDate};
 use serde::{Deserialize, Serialize};
 
 use crate::config::Config;
-use crate::lang::Lang;
+use crate::model::lang::Lang;
 
 /// NeetCode roadmap order of patterns.
 pub const PATTERNS: &[&str] = &[
@@ -169,7 +169,7 @@ pub struct ChatSession {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AiEntry {
-    /// "hint", "review" or "ask: <question>".
+    /// `hint`, `review` or `ask: <question>`.
     pub kind: String,
     pub at: DateTime<Local>,
     pub text: String,
@@ -189,7 +189,7 @@ pub struct Store {
 
 impl Store {
     pub fn new(cfg: &Config) -> Result<Self> {
-        let root = crate::xdg::data_home()
+        let root = crate::config::paths::data_home()
             .context("no data directory on this system")?
             .join("neet");
         let workspace = match &cfg.workspace {
@@ -353,8 +353,8 @@ impl Store {
             if e.status == Status::Solved && e.next_review.is_none() && e.review_stage == 0 {
                 let base = e
                     .solved_at
-                    .map_or_else(crate::srs::today, |d| d.date_naive());
-                crate::srs::schedule_first(e, base);
+                    .map_or_else(crate::model::srs::today, |d| d.date_naive());
+                crate::model::srs::schedule_first(e, base);
             }
         }
         Ok(progress)
@@ -424,7 +424,7 @@ impl Store {
             None => out.push_str(&format!("{c} (no starter code available for this problem)")),
         }
         // Everything below the marker is scratch space that `neet test` replaces.
-        out.push_str(&format!("\n\n{c} {}\n", crate::testing::MARKER));
+        out.push_str(&format!("\n\n{c} {}\n", crate::judge::harness::MARKER));
         out.push_str(lang.harness.trim_start_matches('\n'));
         // create_new: never clobber a solution that appeared in the meantime.
         match std::fs::OpenOptions::new()

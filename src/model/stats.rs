@@ -2,8 +2,8 @@
 
 use chrono::NaiveDate;
 
-use crate::srs;
-use crate::store::{MockRecord, Problem, Progress, Status};
+use crate::model::srs;
+use crate::model::store::{MockRecord, Problem, Progress, Status};
 
 #[derive(Debug, Default, Clone)]
 pub struct PatternStats {
@@ -68,7 +68,7 @@ pub fn by_pattern(
             s.tests_failing += 1;
         }
     }
-    out.sort_by_key(|s| crate::store::pattern_rank(&s.pattern));
+    out.sort_by_key(|s| crate::model::store::pattern_rank(&s.pattern));
     out
 }
 
@@ -153,8 +153,8 @@ pub fn report(
                 m.started.format("%Y-%m-%d"),
                 m.title,
                 m.difficulty,
-                crate::mock::fmt_duration(std::time::Duration::from_secs(m.elapsed_secs)),
-                crate::mock::fmt_duration(std::time::Duration::from_secs(m.limit_secs)),
+                crate::coach::mock::fmt_duration(std::time::Duration::from_secs(m.elapsed_secs)),
+                crate::coach::mock::fmt_duration(std::time::Duration::from_secs(m.limit_secs)),
                 m.result.as_deref().unwrap_or("(no debrief)"),
             ));
         }
@@ -177,7 +177,7 @@ interviews). Under 250 words. Use `##` headings and bullets."
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::store::Entry;
+    use crate::model::store::Entry;
 
     fn problem(slug: &str, pattern: &str) -> Problem {
         Problem {

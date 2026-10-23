@@ -2,7 +2,7 @@
 
 use chrono::{Days, Local, NaiveDate};
 
-use crate::store::{Entry, Status};
+use crate::model::store::{Entry, Status};
 
 /// Days until the next review after each successful pass. After the last one
 /// the problem counts as mastered and is no longer scheduled.

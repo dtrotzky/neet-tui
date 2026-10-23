@@ -1,3 +1,6 @@
+pub mod paths;
+pub mod settings;
+
 use std::collections::HashMap;
 use std::path::PathBuf;
 
@@ -5,8 +8,8 @@ use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
 use toml_edit::{DocumentMut, Item, TableLike, value};
 
-use crate::claude::Kind;
-use crate::lang::{self, Lang};
+use crate::coach::claude::Kind;
+use crate::model::lang::{self, Lang};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
@@ -15,7 +18,7 @@ pub struct Config {
     pub language: String,
     /// Editor command. Defaults to $EDITOR, falling back to nvim.
     pub editor: Option<String>,
-    /// Where your own solutions live. Defaults to <data dir>/workspace;
+    /// Where your own solutions live. Defaults to `<data dir>/workspace`;
     /// `~/` and relative paths are resolved against the home directory.
     pub workspace: Option<PathBuf>,
     /// Open the problem statement in a read-only split next to your code (vim/nvim only).
@@ -138,7 +141,7 @@ impl Default for Config {
 
 impl Config {
     pub fn path() -> PathBuf {
-        crate::xdg::config_home()
+        crate::config::paths::config_home()
             .unwrap_or_else(|| PathBuf::from("."))
             .join("neet")
             .join("config.toml")
