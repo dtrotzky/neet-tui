@@ -153,8 +153,18 @@ pub struct UiState {
 
 /// Claude conversation memory for one problem, so nudges escalate.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default)]
 pub struct AiLog {
     pub entries: Vec<AiEntry>,
+    /// The interactive tutor session (`c`), resumed until a fresh one is started.
+    pub chat: Option<ChatSession>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChatSession {
+    /// Claude Code session id.
+    pub id: String,
+    pub started: DateTime<Local>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

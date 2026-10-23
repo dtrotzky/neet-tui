@@ -23,6 +23,7 @@ pub enum Setting {
     MockEasy,
     MockMedium,
     MockHard,
+    ChatInEditor,
     ClaudeModel,
     Model(Kind),
     ClaudeCmd,
@@ -52,6 +53,7 @@ pub const SECTIONS: &[(&str, &[Setting])] = &[
     (
         "Claude",
         &[
+            Setting::ChatInEditor,
             Setting::ClaudeModel,
             Setting::Model(Kind::Hint),
             Setting::Model(Kind::Review),
@@ -97,6 +99,7 @@ impl Setting {
             Setting::MockEasy => "Mock time: Easy (min)".into(),
             Setting::MockMedium => "Mock time: Medium (min)".into(),
             Setting::MockHard => "Mock time: Hard (min)".into(),
+            Setting::ChatInEditor => "Chat next to your code".into(),
             Setting::ClaudeModel => "Default model".into(),
             Setting::Model(kind) => format!("Model for {}", kind.label()),
             Setting::ClaudeCmd => "Claude command".into(),
@@ -121,6 +124,10 @@ impl Setting {
             Setting::MockEasy | Setting::MockMedium | Setting::MockHard => {
                 "Time limit for a mock interview at this difficulty."
             }
+            Setting::ChatInEditor => {
+                "On = the chat (c) opens in Neovim, split next to your solution. Off = full \
+                 screen. Either way, c continues the problem's last chat and C starts a new one."
+            }
             Setting::ClaudeModel => {
                 "Model alias passed to claude --model. Default = Claude Code's own default."
             }
@@ -133,7 +140,9 @@ impl Setting {
 
     pub fn control(self) -> Control {
         match self {
-            Setting::Split | Setting::Lsp | Setting::MockLsp => Control::Toggle,
+            Setting::Split | Setting::Lsp | Setting::MockLsp | Setting::ChatInEditor => {
+                Control::Toggle
+            }
             Setting::Language | Setting::ClaudeModel | Setting::Model(_) => Control::Cycle,
             Setting::Editor | Setting::Workspace | Setting::ClaudeCmd => Control::Text,
             Setting::RunTimeout | Setting::MockEasy | Setting::MockMedium | Setting::MockHard => {
@@ -159,6 +168,7 @@ impl Setting {
                 }
             }
             Setting::MockLsp => on_off(cfg.mock_disables_lsp),
+            Setting::ChatInEditor => on_off(cfg.chat_in_editor),
             Setting::Workspace => cfg
                 .workspace
                 .as_ref()
@@ -199,6 +209,7 @@ impl Setting {
             Setting::Split => cfg.split_description = !cfg.split_description,
             Setting::Lsp => cfg.editor_lsp = !cfg.editor_lsp,
             Setting::MockLsp => cfg.mock_disables_lsp = !cfg.mock_disables_lsp,
+            Setting::ChatInEditor => cfg.chat_in_editor = !cfg.chat_in_editor,
             Setting::Language => {
                 let keys: Vec<&str> = LANGS.iter().map(|l| l.key).collect();
                 cfg.language = cycle(&keys, &cfg.language, forward).to_string();
@@ -248,7 +259,8 @@ impl Setting {
             Setting::MockEasy => cfg.mock.easy = number()?,
             Setting::MockMedium => cfg.mock.medium = number()?,
             Setting::MockHard => cfg.mock.hard = number()?,
-            Setting::Split | Setting::Lsp | Setting::MockLsp => match input {
+            Setting::Split | Setting::Lsp | Setting::MockLsp | Setting::ChatInEditor => match input
+            {
                 "on" | "true" | "yes" => self.set_bool(cfg, true),
                 "off" | "false" | "no" => self.set_bool(cfg, false),
                 _ => bail!("expected on or off"),
@@ -262,6 +274,7 @@ impl Setting {
             Setting::Split => cfg.split_description = v,
             Setting::Lsp => cfg.editor_lsp = v,
             Setting::MockLsp => cfg.mock_disables_lsp = v,
+            Setting::ChatInEditor => cfg.chat_in_editor = v,
             _ => {}
         }
     }

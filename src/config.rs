@@ -25,6 +25,8 @@ pub struct Config {
     pub editor_lsp: bool,
     /// Always use interview mode during mock interviews, whatever `editor_lsp` says.
     pub mock_disables_lsp: bool,
+    /// Open the Claude chat (`c`) in Neovim next to the solution instead of full screen.
+    pub chat_in_editor: bool,
     /// Kill a run (`T`) after this many seconds; tests get twice as long (compiling).
     pub run_timeout_secs: u64,
     /// Mock interview time limits.
@@ -123,6 +125,7 @@ impl Default for Config {
             split_description: true,
             editor_lsp: true,
             mock_disables_lsp: true,
+            chat_in_editor: false,
             run_timeout_secs: 20,
             mock: MockConfig::default(),
             claude_cmd: "claude".into(),
@@ -218,6 +221,7 @@ impl Config {
         set_value(root, "split_description", value(self.split_description));
         set_value(root, "editor_lsp", value(self.editor_lsp));
         set_value(root, "mock_disables_lsp", value(self.mock_disables_lsp));
+        set_value(root, "chat_in_editor", value(self.chat_in_editor));
         set_value(
             root,
             "run_timeout_secs",
@@ -329,6 +333,9 @@ split_description = true
 editor_lsp = true
 # Always use interview mode during mock interviews
 mock_disables_lsp = true
+
+# Open the Claude chat (c) in Neovim, next to your solution, instead of full screen
+chat_in_editor = false
 
 # Seconds before a run is killed (tests get twice as long)
 run_timeout_secs = 20
