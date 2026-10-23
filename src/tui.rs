@@ -247,38 +247,7 @@ pub struct App {
 }
 
 pub fn run(cfg: Config, store: Store) -> Result<()> {
-    let problems = store.load_problems()?;
-    let progress = store.load_progress()?;
-    let ui = store.load_ui();
-    let mut app = App {
-        cfg,
-        store,
-        problems,
-        progress,
-        today: srs::today(),
-        list: ListKind::from_id(&ui.list),
-        search: String::new(),
-        hide_solved: ui.hide_solved,
-        rows: Vec::new(),
-        list_state: ListState::default(),
-        pane: Pane::Problem,
-        scroll: 0,
-        mode: Mode::Normal,
-        ai: None,
-        run: None,
-        output: None,
-        mock: None,
-        status: None,
-        version: 0,
-        view: None,
-        list_area: Rect::default(),
-        pane_area: Rect::default(),
-        quit: false,
-    };
-    let keep = ui
-        .slug
-        .and_then(|s| app.problems.iter().position(|p| p.slug == s));
-    app.rebuild(keep);
+    let mut app = App::new(cfg, store)?;
 
     // ratatui::init installs a panic hook restoring the terminal; chain one that
     // also turns mouse capture and bracketed paste off again.
@@ -330,6 +299,42 @@ fn resume(terminal: &mut DefaultTerminal) -> Result<()> {
 }
 
 impl App {
+    fn new(cfg: Config, store: Store) -> Result<Self> {
+        let problems = store.load_problems()?;
+        let progress = store.load_progress()?;
+        let ui = store.load_ui();
+        let mut app = App {
+            cfg,
+            store,
+            problems,
+            progress,
+            today: srs::today(),
+            list: ListKind::from_id(&ui.list),
+            search: String::new(),
+            hide_solved: ui.hide_solved,
+            rows: Vec::new(),
+            list_state: ListState::default(),
+            pane: Pane::Problem,
+            scroll: 0,
+            mode: Mode::Normal,
+            ai: None,
+            run: None,
+            output: None,
+            mock: None,
+            status: None,
+            version: 0,
+            view: None,
+            list_area: Rect::default(),
+            pane_area: Rect::default(),
+            quit: false,
+        };
+        let keep = ui
+            .slug
+            .and_then(|s| app.problems.iter().position(|p| p.slug == s));
+        app.rebuild(keep);
+        Ok(app)
+    }
+
     fn event_loop(&mut self, terminal: &mut DefaultTerminal) -> Result<()> {
         let mut dirty = true;
         while !self.quit {
@@ -2235,7 +2240,117 @@ fn draw_help(f: &mut Frame) {
 
 #[cfg(test)]
 mod tests {
+    use std::path::PathBuf;
+
+    use ratatui::Terminal;
+    use ratatui::backend::TestBackend;
     use ratatui::widgets::{Paragraph, Wrap};
+
+    use super::*;
+
+    /// An app on a fresh store with the bundled problem list.
+    fn app(name: &str) -> (App, PathBuf) {
+        let dir = std::env::temp_dir().join(format!("neet-tui-{}-{name}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let store = Store {
+            root: dir.join("data"),
+            workspace: dir.join("workspace"),
+        };
+        std::fs::create_dir_all(&store.root).unwrap();
+        std::fs::write(store.problems_path(), include_str!("../data/problems.json")).unwrap();
+        let cfg = Config {
+            language: "python".into(),
+            ..Config::default()
+        };
+        (App::new(cfg, store).unwrap(), dir)
+    }
+
+    fn press(app: &mut App, code: KeyCode) {
+        assert!(
+            app.on_key(KeyEvent::new(code, KeyModifiers::NONE))
+                .is_none()
+        );
+    }
+
+    fn typing(app: &mut App, text: &str) {
+        for c in text.chars() {
+            press(app, KeyCode::Char(c));
+        }
+    }
+
+    /// Renders the app and returns the screen as text.
+    fn screen(app: &mut App) -> String {
+        let mut term = Terminal::new(TestBackend::new(140, 40)).unwrap();
+        term.draw(|f| app.draw(f)).unwrap();
+        let buf = term.backend().buffer();
+        (0..buf.area.height)
+            .map(|y| {
+                (0..buf.area.width)
+                    .map(|x| buf[(x, y)].symbol())
+                    .collect::<String>()
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
+    #[test]
+    fn starts_on_the_150_and_navigates() {
+        let (mut app, dir) = app("nav");
+        let s = screen(&mut app);
+        assert!(s.contains("NeetCode 150"), "{s}");
+        assert!(s.contains("Contains Duplicate"), "{s}");
+        assert_eq!(app.selected().unwrap().slug, "contains-duplicate");
+        press(&mut app, KeyCode::Char('j'));
+        assert_eq!(app.selected().unwrap().slug, "valid-anagram");
+        press(&mut app, KeyCode::Char('l'));
+        assert!(screen(&mut app).contains("NeetCode 250"));
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn marks_solved_and_hides_solved() {
+        let (mut app, dir) = app("solve");
+        press(&mut app, KeyCode::Char('x'));
+        let progress = app.store.load_progress().unwrap();
+        assert_eq!(
+            progress.entries["contains-duplicate"].status,
+            Status::Solved
+        );
+        assert!(screen(&mut app).contains("✓"));
+        press(&mut app, KeyCode::Char('u'));
+        assert!(!screen(&mut app).contains("Contains Duplicate"));
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn search_filters_the_list() {
+        let (mut app, dir) = app("search");
+        press(&mut app, KeyCode::Char('/'));
+        typing(&mut app, "anagram");
+        press(&mut app, KeyCode::Enter);
+        let s = screen(&mut app);
+        assert!(s.contains("Valid Anagram"), "{s}");
+        assert!(!s.contains("Contains Duplicate"), "{s}");
+        press(&mut app, KeyCode::Esc);
+        assert!(screen(&mut app).contains("Contains Duplicate"));
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn panes_help_and_quit() {
+        let (mut app, dir) = app("panes");
+        for key in ['2', '3', '4', '5', '1'] {
+            press(&mut app, KeyCode::Char(key));
+            screen(&mut app);
+        }
+        press(&mut app, KeyCode::Char('?'));
+        assert!(matches!(app.mode, Mode::Help));
+        screen(&mut app);
+        press(&mut app, KeyCode::Esc);
+        press(&mut app, KeyCode::Char('q'));
+        assert!(app.quit);
+        let _ = std::fs::remove_dir_all(dir);
+    }
 
     #[test]
     fn line_count_wraps_long_lines() {

@@ -307,6 +307,12 @@ fn hex_at(b: &[u8], i: usize, len: usize) -> Option<u32> {
 // NeetCode repo: articles + per-language solutions
 
 fn fetch_repo(store: &Store, problems: &[Problem]) -> Result<(usize, usize)> {
+    extract_repo(store, problems, get(TARBALL_URL, Duration::from_secs(600))?)
+}
+
+/// Saves the articles and solution files for known problems from the repo's `.tar.gz`.
+/// Destinations come from the problem list, never from names inside the archive.
+fn extract_repo(store: &Store, problems: &[Problem], tgz: impl Read) -> Result<(usize, usize)> {
     let mut by_article: HashMap<&str, &str> = HashMap::new();
     let mut by_code: HashMap<&str, &str> = HashMap::new();
     for p in problems {
@@ -324,8 +330,7 @@ fn fetch_repo(store: &Store, problems: &[Problem]) -> Result<(usize, usize)> {
     let mut have_article: HashSet<String> = HashSet::new();
     let (mut articles, mut codes) = (0, 0);
 
-    let gz = flate2::read::GzDecoder::new(get(TARBALL_URL, Duration::from_secs(600))?);
-    let mut archive = tar::Archive::new(gz);
+    let mut archive = tar::Archive::new(flate2::read::GzDecoder::new(tgz));
     for entry in archive.entries()? {
         let mut entry = entry?;
         let path = entry.path()?.into_owned();
@@ -448,6 +453,11 @@ fn fetch_one(store: &Store, p: &Problem) -> Result<()> {
             Err(e) => return Err(e.into()),
         }
     };
+    save_question(store, p, &resp)
+}
+
+/// Writes `details.json` and the Markdown statement from a LeetCode GraphQL response.
+fn save_question(store: &Store, p: &Problem, resp: &Value) -> Result<()> {
     let q = &resp["data"]["question"];
     if q.is_null() {
         match resp["errors"][0]["message"].as_str() {
@@ -710,6 +720,133 @@ fn html_to_text(html: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn temp_store(name: &str) -> Store {
+        let dir = std::env::temp_dir().join(format!("neet-sync-{}-{name}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        Store {
+            root: dir.clone(),
+            workspace: dir.join("workspace"),
+        }
+    }
+
+    fn two_sum() -> Problem {
+        bundled_lists()
+            .unwrap()
+            .into_iter()
+            .find(|p| p.slug == "two-sum")
+            .unwrap()
+    }
+
+    #[test]
+    fn saves_a_leetcode_question() {
+        let store = temp_store("question");
+        let p = two_sum();
+        let resp = json!({ "data": { "question": {
+            "questionFrontendId": "1",
+            "isPaidOnly": false,
+            "content": "<p>Given an array <code>nums</code>\u{1b}[2J, return indices.</p>",
+            "exampleTestcaseList": ["[2,7,11,15]\n9"],
+            "hints": ["<p>Use a <b>hash map</b>.</p>"],
+            "topicTags": [{ "name": "Array" }],
+            "codeSnippets": [{ "langSlug": "python3", "code": "class Solution:\n    pass" }],
+        }}});
+        save_question(&store, &p, &resp).unwrap();
+        let d = store.load_details("two-sum").unwrap();
+        assert_eq!(d.id.as_deref(), Some("1"));
+        assert!(
+            d.description.contains("Given an array"),
+            "{}",
+            d.description
+        );
+        assert!(!d.description.contains('\u{1b}'));
+        assert_eq!(d.examples, ["[2,7,11,15]\n9"]);
+        assert!(d.hints[0].contains("hash map"));
+        assert_eq!(d.snippets["python3"], "class Solution:\n    pass");
+        let md = store.load_description("two-sum").unwrap();
+        assert!(
+            md.starts_with("# 1. Two Sum\n\n**Easy** · Arrays & Hashing · Blind 75"),
+            "{md}"
+        );
+        let _ = std::fs::remove_dir_all(&store.root);
+    }
+
+    #[test]
+    fn premium_and_missing_questions() {
+        let store = temp_store("premium");
+        let p = two_sum();
+        let premium = json!({ "data": { "question": { "isPaidOnly": true, "content": null }}});
+        save_question(&store, &p, &premium).unwrap();
+        let d = store.load_details("two-sum").unwrap();
+        assert!(d.premium && d.description.starts_with(PREMIUM_MARKER));
+
+        // A statement written later (by Claude) survives the next sync.
+        let mut written = d.clone();
+        written.description = "Our own statement".into();
+        write_json(&store.details_path("two-sum"), &written).unwrap();
+        save_question(&store, &p, &premium).unwrap();
+        assert_eq!(
+            store.load_details("two-sum").unwrap().description,
+            "Our own statement"
+        );
+
+        let missing = json!({ "data": { "question": null }, "errors": [{ "message": "nope" }] });
+        let err = save_question(&store, &p, &missing).unwrap_err();
+        assert!(err.to_string().contains("nope"));
+        let _ = std::fs::remove_dir_all(&store.root);
+    }
+
+    fn tgz(files: &[(&str, &str)]) -> Vec<u8> {
+        let gz = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::fast());
+        let mut tar = tar::Builder::new(gz);
+        for (path, body) in files {
+            let mut header = tar::Header::new_gnu();
+            header.set_size(body.len() as u64);
+            header.set_mode(0o644);
+            header.set_cksum();
+            tar.append_data(&mut header, path, body.as_bytes()).unwrap();
+        }
+        tar.into_inner().unwrap().finish().unwrap()
+    }
+
+    #[test]
+    fn extracts_articles_and_solutions_for_known_problems() {
+        let store = temp_store("repo");
+        let problems = bundled_lists().unwrap();
+        let archive = tgz(&[
+            // NeetCode-named article wins over the LeetCode-named one.
+            (
+                "leetcode-main/articles/duplicate-integer.md",
+                "# Hash set\x1b[31m\n",
+            ),
+            (
+                "leetcode-main/articles/contains-duplicate.md",
+                "older copy\n",
+            ),
+            (
+                "leetcode-main/python/0217-contains-duplicate.py",
+                "class Solution: ...\n",
+            ),
+            ("leetcode-main/python/9999-not-in-the-list.py", "ignored\n"),
+            ("leetcode-main/articles/nested/two-sum.md", "ignored\n"),
+            ("leetcode-main/README.md", "ignored\n"),
+        ]);
+        let counts = extract_repo(&store, &problems, archive.as_slice()).unwrap();
+        assert_eq!(counts, (1, 1));
+        let article = store.load_article("contains-duplicate").unwrap();
+        assert!(
+            article.starts_with("# Hash set") && !article.contains('\x1b'),
+            "{article:?}"
+        );
+        let python = LANGS.iter().find(|l| l.key == "python").unwrap();
+        assert!(
+            store
+                .load_ref_solution("contains-duplicate", python)
+                .is_some()
+        );
+        assert!(store.load_article("two-sum").is_none());
+        let _ = std::fs::remove_dir_all(&store.root);
+    }
 
     #[test]
     fn bundled_lists_are_complete_and_safe() {
