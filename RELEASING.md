@@ -30,7 +30,7 @@ hand; the release workflow checks that the two match. When Dependabot bumps an a
 
 ## Built-in tests
 
-`data/tests.json` holds per-problem settings (comparison mode, unsupported problems) and the
+`assets/tests.json` holds per-problem settings (comparison mode, unsupported problems) and the
 shipped edge cases. Two hidden maintainer commands work on it, using the synced data in
 `~/.local/share/neet` (run `neet sync` first):
 
@@ -42,4 +42,4 @@ neet dev tidy-tests              # rewrite the file in its layout (after editing
 
 `gen-tests` skips problems that already have edge cases (`--force` regenerates them) and only
 keeps cases the reference solution handles. Run `check-tests` before committing a change to
-`data/tests.json` or `src/harness.py`; it must report 0 failures.
+`assets/tests.json` or `assets/harness.py`; it must report 0 failures.

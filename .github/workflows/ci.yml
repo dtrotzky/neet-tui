@@ -35,6 +35,9 @@ jobs:
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
       - run: cargo fmt --check
         if: runner.os == 'Linux'
+      # The built-in test harness is embedded as text, so the Rust build doesn't check it.
+      - run: python3 -m py_compile assets/harness.py
+        if: runner.os == 'Linux'
       - run: cargo clippy --locked --all-targets -- -D warnings
       - run: cargo test --locked
 

@@ -225,7 +225,7 @@ block below the marker line.
 **Note on tests:** Claude-written test harnesses are code run on your machine, like your own
 solution. Claude is told not to touch files, the network or other processes, and every harness
 is a plain file you can read in `~/.local/share/neet/tests/` before trusting it. The built-in
-harness is part of neet (`src/harness.py`).
+harness is part of neet (`assets/harness.py`).
 
 ## Roadmap
 
@@ -237,7 +237,7 @@ neet is an independent project, not affiliated with or endorsed by NeetCode or L
 repository doesn't contain their problem statements, write-ups or solutions: `neet sync`
 downloads them to your machine for your own practice, from neetcode.io, LeetCode and the
 MIT-licensed [neetcode-gh/leetcode](https://github.com/neetcode-gh/leetcode) repository. The
-only list data shipped with neet is `data/problems.json` (titles, slugs, patterns, difficulty
+only list data shipped with neet is `assets/problems.json` (titles, slugs, patterns, difficulty
 and video ids), used when neetcode.io can't be read. Please respect those sites' terms of use,
 and don't redistribute the downloaded content.
 
