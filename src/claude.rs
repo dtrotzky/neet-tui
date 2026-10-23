@@ -1,6 +1,7 @@
 //! Coaching via the Claude Code CLI (`claude -p`), so no API key is needed.
 
 use std::io::{BufRead, BufReader, Read, Write};
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::mpsc::{self, Receiver};
 
@@ -16,8 +17,7 @@ use crate::store::{AiLog, Problem, Store};
 pub const MAX_HINT_LEVEL: usize = 4;
 /// Only the most recent coaching entries are sent back as context.
 const HISTORY_ENTRIES: usize = 6;
-// Prompt budgets in characters, so huge files can't blow up a request
-// (or the 128 KiB single-argument limit for the tutor session).
+// Prompt budgets in characters, so huge files can't blow up a request.
 const MAX_STATEMENT: usize = 12_000;
 const MAX_REFERENCE: usize = 24_000;
 const MAX_CODE: usize = 20_000;
@@ -331,18 +331,19 @@ pub fn verdict(text: &str) -> Option<bool> {
     }
 }
 
-/// Context passed to an interactive `claude` session started from the TUI.
+/// Context for an interactive `claude` tutor session (`c`).
 pub fn tutor_system_prompt(ctx: &Coaching, solution_path: &str) -> String {
-    // Passed as a single argv entry, which Linux caps at 128 KiB.
-    const MAX_ARG: usize = 120 * 1024;
+    const MAX_PROMPT: usize = 120 * 1024;
     let mut prompt = format!(
         "{SYSTEM}\n\nYou are in an interactive tutoring session. The candidate's solution file is \
-{solution_path}; read it when they ask about their code. Do not edit it unless they ask. \
-Do not reveal the full solution unless they explicitly ask for it.\n\n{}",
+{solution_path}. The session is resumed when the candidate comes back after editing it, and \
+the code below is only a snapshot from when the session started, so read the file again \
+whenever you discuss their code. Do not edit it unless they ask. Do not reveal the full \
+solution unless they explicitly ask for it.\n\n{}",
         ctx.common()
     );
-    if prompt.len() > MAX_ARG {
-        let mut cut = MAX_ARG;
+    if prompt.len() > MAX_PROMPT {
+        let mut cut = MAX_PROMPT;
         while !prompt.is_char_boundary(cut) {
             cut -= 1;
         }
@@ -351,9 +352,76 @@ Do not reveal the full solution unless they explicitly ask for it.\n\n{}",
     prompt
 }
 
+/// A random (version 4) UUID for `claude --session-id`.
+pub fn new_session_id() -> Result<String> {
+    let mut b = [0u8; 16];
+    std::fs::File::open("/dev/urandom")?.read_exact(&mut b)?;
+    b[6] = (b[6] & 0x0f) | 0x40;
+    b[8] = (b[8] & 0x3f) | 0x80;
+    let h: String = b.iter().map(|x| format!("{x:02x}")).collect();
+    Ok(format!(
+        "{}-{}-{}-{}-{}",
+        &h[..8],
+        &h[8..12],
+        &h[12..16],
+        &h[16..20],
+        &h[20..]
+    ))
+}
+
+/// Whether Claude Code still has the transcript of a session started in `cwd`, so it can be
+/// resumed (old sessions are cleaned up after a while).
+pub fn session_exists(cwd: &Path, id: &str) -> bool {
+    session_file(&claude_home(), cwd, id).is_some_and(|f| f.is_file())
+}
+
+fn claude_home() -> PathBuf {
+    std::env::var_os("CLAUDE_CONFIG_DIR")
+        .map(PathBuf::from)
+        .or_else(|| dirs::home_dir().map(|h| h.join(".claude")))
+        .unwrap_or_default()
+}
+
+/// `<home>/projects/<cwd with every non-alphanumeric character as '-'>/<id>.jsonl`.
+fn session_file(home: &Path, cwd: &Path, id: &str) -> Option<PathBuf> {
+    if !crate::store::is_safe_ident(id) {
+        return None;
+    }
+    let cwd = cwd.canonicalize().unwrap_or_else(|_| cwd.to_path_buf());
+    let project: String = cwd
+        .to_str()?
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
+        .collect();
+    Some(
+        home.join("projects")
+            .join(project)
+            .join(format!("{id}.jsonl")),
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn session_ids_and_files() {
+        let id = new_session_id().unwrap();
+        assert_eq!(id.len(), 36);
+        assert_eq!(id.as_bytes()[14], b'4');
+        assert_ne!(id, new_session_id().unwrap());
+        assert_eq!(
+            session_file(
+                Path::new("/h/.claude"),
+                Path::new("/no/such/.local/share/neet/workspace/python"),
+                "abc"
+            ),
+            Some(PathBuf::from(
+                "/h/.claude/projects/-no-such--local-share-neet-workspace-python/abc.jsonl"
+            ))
+        );
+        assert_eq!(session_file(Path::new("/h"), Path::new("/w"), "../x"), None);
+    }
 
     #[test]
     fn verdict_reads_last_line() {

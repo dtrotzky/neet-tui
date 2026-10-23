@@ -215,7 +215,8 @@ struct View {
 enum External {
     Edit(usize),
     Notes(usize),
-    Tutor(usize),
+    /// The Claude chat; `true` starts a new session instead of continuing the last one.
+    Tutor(usize, bool),
 }
 
 pub struct App {
@@ -1193,23 +1194,10 @@ impl App {
                 let p = self.problems[i].clone();
                 actions::edit_notes(&self.store, &self.cfg, &p)?;
             }
-            External::Tutor(i) => {
+            External::Tutor(i, fresh) => {
                 let p = self.problems[i].clone();
-                let sol = self.store.ensure_solution(&p, self.cfg.lang())?;
-                let ctx = claude::Coaching::gather(&self.store, &self.cfg, &p);
-                let sys = claude::tutor_system_prompt(&ctx, &sol.display().to_string());
-                let mut cmd = Command::new(&self.cfg.claude_cmd);
-                cmd.current_dir(sol.parent().unwrap_or(&self.store.workspace))
-                    .args(["--append-system-prompt", &sys]);
-                if let Some(m) = self.cfg.model_for(Kind::Chat) {
-                    cmd.args(["--model", m]);
-                }
-                cmd.arg(format!(
-                    "I'm working on \"{}\". Briefly ask me how I'm thinking about approaching it.",
-                    p.title
-                ));
-                cmd.status()
-                    .with_context(|| format!("failed to start `{}`", self.cfg.claude_cmd))?;
+                let lsp = self.cfg.lsp_enabled(false);
+                actions::chat(&self.store, &self.cfg, &p, fresh, lsp)?;
             }
         }
         self.touch();
@@ -1480,9 +1468,9 @@ impl App {
             }
             KeyCode::Enter | KeyCode::Char('e') => return self.selected_idx().map(External::Edit),
             KeyCode::Char('N') => return self.selected_idx().map(External::Notes),
-            KeyCode::Char('c') => {
+            KeyCode::Char(c @ ('c' | 'C')) => {
                 if !self.locked() {
-                    return self.selected_idx().map(External::Tutor);
+                    return self.selected_idx().map(|i| External::Tutor(i, c == 'C'));
                 }
             }
             KeyCode::Char('t') => self.start_tests(false),
@@ -1981,15 +1969,21 @@ impl App {
                 Default::default()
             }
         };
-        if log.entries.is_empty() && md.is_empty() {
+        if log.entries.is_empty() && log.chat.is_none() && md.is_empty() {
             md.push_str(
                 "No coaching yet for this problem.\n\n\
                  - `h` ask for a nudge (they escalate, never the full answer)\n\
                  - `r` get your code reviewed like an interviewer would\n\
                  - `a` ask Claude a question\n\
-                 - `c` open an interactive tutoring session\n\
+                 - `c` chat with Claude; quit, edit your code, and `c` continues the same chat\n\
                  - `m` do it as a timed mock interview instead\n",
             );
+        }
+        if let Some(chat) = &log.chat {
+            md.push_str(&format!(
+                "Chat started {}: `c` continues it, `C` starts a new one.\n\n---\n\n",
+                chat.started.format("%b %d %H:%M")
+            ));
         }
         for e in log.entries.iter().rev() {
             md.push_str(&format!(
@@ -2193,7 +2187,11 @@ fn draw_help(f: &mut Frame) {
         ("T", "run your file as-is"),
         ("h", "nudge: question → insight → outline → pseudocode"),
         ("r", "Claude reviews your code; PASS marks it solved"),
-        ("a / c", "ask Claude a question / interactive tutor"),
+        ("a", "ask Claude a question"),
+        (
+            "c / C",
+            "chat with Claude: continue this problem's chat / new chat",
+        ),
         ("m", "mock interview: timed, no help, then a debrief"),
         ("n / R", "next unsolved / random unsolved problem"),
         ("D", "toggle the due-for-review list"),

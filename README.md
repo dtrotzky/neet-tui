@@ -80,6 +80,12 @@ stay. Mock interviews use interview mode automatically (also a setting). It work
 Neovim config, nothing to change in yours; plain Vim is unaffected. Your statusline can check
 `vim.g.neet_interview`.
 
+**Chat (`c`).** A full Claude Code session about the problem, which can read your solution file.
+Each problem keeps its chat: quit it (`/exit`), work on your code, and `c` picks up the same
+conversation, so you can say "I tried your hint, have a look" and Claude reads the new code. `C`
+starts a new chat. With "Chat next to your code" on in the settings, the chat opens in Neovim in
+a split next to your solution instead, so you can edit and chat without switching.
+
 **Notes (`N`).** A Markdown file per problem in `<workspace>/notes/` for your one-line insight.
 Shown under the statement; `neet notes --export > cheatsheet.md` collects all of them, grouped by
 pattern, for the night before an interview.
@@ -96,7 +102,8 @@ pattern, for the night before an interview.
 | `T` | run your file as-is (20 s timeout) |
 | `h` | **nudge**: escalates question → key insight → outline → pseudocode, never full code |
 | `r` | **review** like an interviewer: verdict, bugs, complexity, tips, likely follow-up. `PASS` marks it solved |
-| `a` / `c` | ask Claude a question / interactive Claude tutoring session |
+| `a` | ask Claude a question |
+| `c` / `C` | chat with Claude about the problem: continue its last chat / start a new one |
 | `m` | mock interview: start, finish coding, answer the interviewer |
 | `n` / `R` | next unsolved problem in roadmap order / random unsolved |
 | `D` | toggle the due-for-review list |
@@ -130,6 +137,7 @@ neet run 1                        # run your file as-is
 neet hint two-sum                 # next nudge, streamed
 neet review two-sum
 neet ask two-sum "why is a hash map better than sorting here?"
+neet chat two-sum [--new]         # chat with Claude, continuing the last chat
 neet solution two-sum             # NeetCode write-up in your language
 neet done two-sum [--undo]        # mark solved / complete a due review
 neet due                          # spaced-repetition reviews due today
@@ -174,6 +182,7 @@ language = "python"   # python, cpp, java, go, rust, javascript, typescript, csh
 split_description = true
 editor_lsp = true          # false = interview mode: highlighting only, no LSP/completion/AI
 mock_disables_lsp = true   # interview mode during mock interviews
+chat_in_editor = false     # true = the chat (c) opens in nvim next to your solution
 run_timeout_secs = 20      # tests get twice as long
 claude_cmd = "claude"
 # claude_model = "opus"

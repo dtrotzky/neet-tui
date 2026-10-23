@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- The chat (`c`) continues each problem's last conversation, so you can quit, work on your code
+  and come back to the same chat; `C` starts a new one. Also as `neet chat <problem> [--new]`.
+- New setting "Chat next to your code" (`chat_in_editor`): the chat opens in Neovim, split next
+  to your solution.
+
 ## 0.1.1
 
 - The repository is now `dtrotzky/neet-tui` (was `neet-cli`). The installer and download links
