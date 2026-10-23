@@ -22,7 +22,7 @@ isn't found after installing, add `~/.cargo/bin` to your `PATH`.
 
 | Data | Source |
 | --- | --- |
-| Problem lists (Blind 75, NeetCode 150, NeetCode 250), patterns, order | neetcode.io |
+| Problem lists (Blind 75, NeetCode 150, NeetCode 250), patterns, order | neetcode.io, or a snapshot bundled with neet if the site's format changes |
 | Solution write-ups (intuition, algorithm, all approaches, complexity) and code in 9+ languages | [neetcode-gh/leetcode](https://github.com/neetcode-gh/leetcode) |
 | Problem statements, starter code, examples | LeetCode |
 | Statements and starter code for the 7 LeetCode Premium problems (Meeting Rooms, Alien Dictionary, ...) | written once by Claude from NeetCode's write-up |

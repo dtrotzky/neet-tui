@@ -69,9 +69,6 @@ To decide and build:
 
 Planned once the tool has been used for a while; not needed for personal use:
 
-- **Bundled list snapshot.** The NeetCode 250 list is parsed from neetcode.io's JavaScript
-  bundle, which will break when the site changes. Ship a snapshot of the list in the repo as a
-  fallback so `neet sync` doesn't depend on the site's internals.
 - **Integration tests and CI.** Unit tests cover the parsers, scheduling and rendering helpers;
   add end-to-end tests (sync against fixtures, test runner, TUI flows) and a GitHub Actions
   workflow.

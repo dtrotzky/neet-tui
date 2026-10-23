@@ -19,8 +19,6 @@ use crate::render::sanitize;
 use crate::store::{Details, Problem, Store, is_safe_ident, pattern_rank, write_json};
 
 const PRACTICE_URL: &str = "https://neetcode.io/practice";
-const SITE_DATA_URL: &str =
-    "https://raw.githubusercontent.com/neetcode-gh/leetcode/main/.problemSiteData.json";
 const TARBALL_URL: &str = "https://codeload.github.com/neetcode-gh/leetcode/tar.gz/refs/heads/main";
 const LEETCODE_GRAPHQL: &str = "https://leetcode.com/graphql";
 const USER_AGENT: &str = "neet-cli (offline NeetCode practice)";
@@ -45,14 +43,14 @@ pub fn run(store: &Store, cfg: &Config, force: bool) -> Result<()> {
         Err(e) => {
             eprintln!("    neetcode.io lists unavailable ({e:#})");
             match store.load_problems() {
-                // Don't replace a complete cached list with the partial fallback.
+                // An earlier sync is usually newer than the bundled snapshot.
                 Ok(cached) if cached.iter().any(|p| p.nc250) => {
                     eprintln!("    keeping the cached problem list");
                     cached
                 }
                 _ => {
-                    eprintln!("    falling back to GitHub data (Blind 75 and NeetCode 150 only)");
-                    fetch_lists_from_github()?
+                    eprintln!("    using the problem list bundled with neet");
+                    bundled_lists()?
                 }
             }
         }
@@ -116,24 +114,13 @@ fn fetch_lists_from_site() -> Result<Vec<Problem>> {
     Ok(problems)
 }
 
-fn fetch_lists_from_github() -> Result<Vec<Problem>> {
-    let raw: Vec<HashMap<String, Value>> = serde_json::from_str(&get_string(SITE_DATA_URL)?)?;
-    let objs = raw
-        .into_iter()
-        .map(|o| {
-            o.into_iter()
-                .filter_map(|(k, v)| {
-                    let v = match v {
-                        Value::String(s) => JsVal::Str(s),
-                        Value::Bool(b) => JsVal::Bool(b),
-                        _ => return None,
-                    };
-                    Some((k, v))
-                })
-                .collect()
-        })
-        .collect();
-    Ok(problems_from_objects(objs))
+/// Snapshot of the lists (titles, slugs, patterns, flags; no statements or solutions), used
+/// when neetcode.io's bundle can't be parsed. To refresh it, run `neet sync` and copy
+/// `<data>/problems.json` here with one problem per line.
+const BUNDLED_LISTS: &str = include_str!("../data/problems.json");
+
+fn bundled_lists() -> Result<Vec<Problem>> {
+    serde_json::from_str(BUNDLED_LISTS).context("bundled problem list is invalid")
 }
 
 #[derive(Debug, Clone)]
@@ -723,6 +710,31 @@ fn html_to_text(html: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn bundled_lists_are_complete_and_safe() {
+        let problems = bundled_lists().unwrap();
+        let count = |f: fn(&Problem) -> bool| problems.iter().filter(|p| f(p)).count();
+        assert_eq!(count(|p| p.nc250), 250);
+        assert_eq!(count(|p| p.nc150), 150);
+        assert_eq!(count(|p| p.blind75), 75);
+        let mut slugs: Vec<&str> = problems.iter().map(|p| p.slug.as_str()).collect();
+        slugs.sort_unstable();
+        slugs.dedup();
+        assert_eq!(slugs.len(), problems.len(), "duplicate slugs");
+        for p in &problems {
+            assert!(
+                is_safe_ident(&p.slug) && is_safe_ident(&p.file_stem()),
+                "{}",
+                p.slug
+            );
+            assert!(
+                !p.pattern.is_empty() && !p.difficulty.is_empty(),
+                "{}",
+                p.slug
+            );
+        }
+    }
 
     #[test]
     fn parses_flat_js_objects() {
