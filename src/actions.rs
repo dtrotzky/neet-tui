@@ -454,21 +454,25 @@ pub fn run_tests(
     cancel: &Cancel,
 ) -> Result<(String, Option<(u32, u32)>)> {
     testing::ensure_has_solution(store, cfg, p)?;
-    if regenerate || testing::load_harness(store, cfg, p).is_none() {
+    let source = if testing::needs_claude(store, cfg, p, regenerate) {
         testing::generate(store, cfg, p)?;
-    }
-    run_existing_tests(store, cfg, p, timeout, cancel)
+        testing::Source::Claude
+    } else {
+        testing::Source::Auto
+    };
+    run_existing_tests(store, cfg, p, source, timeout, cancel)
 }
 
-/// Runs tests with an already generated harness, recording the result.
+/// Runs tests with an existing harness (built-in or generated), recording the result.
 pub fn run_existing_tests(
     store: &Store,
     cfg: &Config,
     p: &Problem,
+    source: testing::Source,
     timeout: Duration,
     cancel: &Cancel,
 ) -> Result<(String, Option<(u32, u32)>)> {
-    let file = testing::build_test_file(store, cfg, p)?;
+    let file = testing::build_test_file(store, cfg, p, source)?;
     let output = run_captured(cfg, store, &file, timeout, cancel)?;
     let result = testing::parse_result(&output);
     if let Some((passed, total)) = result {

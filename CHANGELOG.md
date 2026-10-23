@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Built-in tests for 233 of the 250 problems in Python, without Claude: the statement's examples
+  plus shipped edge cases with outputs from NeetCode's reference solutions. Other languages and
+  the remaining problems still get a Claude-written harness, now built from the same cases.
+
 ## 0.1.1
 
 - The repository is now `dtrotzky/neet-tui` (was `neet-cli`). The installer and download links

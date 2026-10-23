@@ -27,3 +27,19 @@ Changing the release setup (targets, installers, pinned actions): edit `dist-wor
 run `dist generate` (`cargo install cargo-dist --locked`) instead of editing the workflow by
 hand; the release workflow checks that the two match. When Dependabot bumps an action in
 `release.yml`, update the matching commit in `[dist.github-action-commits]` too.
+
+## Built-in tests
+
+`data/tests.json` holds per-problem settings (comparison mode, unsupported problems) and the
+shipped edge cases. Two hidden maintainer commands work on it, using the synced data in
+`~/.local/share/neet` (run `neet sync` first):
+
+```sh
+neet dev check-tests [slug...]   # run the built-in tests against NeetCode's reference solutions
+neet dev gen-tests [slug...]     # add edge cases: inputs by Claude, outputs by the reference
+neet dev tidy-tests              # rewrite the file in its layout (after editing it by hand)
+```
+
+`gen-tests` skips problems that already have edge cases (`--force` regenerates them) and only
+keeps cases the reference solution handles. Run `check-tests` before committing a change to
+`data/tests.json` or `src/harness.py`; it must report 0 failures.
